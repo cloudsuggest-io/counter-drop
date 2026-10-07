@@ -14,7 +14,8 @@ import {
   aws_budgets as budgets, aws_certificatemanager as acm, aws_cloudfront as cf,
   aws_cloudfront_origins as origins, aws_cloudwatch as cw, aws_cloudwatch_actions as cwActions,
   aws_dynamodb as ddb, aws_events as events, aws_events_targets as targets, aws_iam as iam,
-  aws_lambda as lambda, aws_lambda_event_sources as sources, aws_logs as logs, aws_s3 as s3,
+  aws_lambda as lambda, aws_lambda_event_sources as sources, aws_logs as logs, aws_route53 as route53,
+  aws_route53_targets as r53targets, aws_s3 as s3,
   aws_s3_deployment as s3deploy, aws_sns as sns, aws_sns_subscriptions as subs,
 } from 'aws-cdk-lib'
 import type { Construct } from 'constructs'
@@ -33,6 +34,11 @@ export interface CounterDropProps extends StackProps {
   /** Custom domain + ACM certificate in us-east-1 (both or neither). */
   domainName?: string
   certificateArn?: string
+  /** Route 53 hosted zone holding domainName (e.g. the zone for cloudsuggest.in). When set, the stack owns the
+   *  A + AAAA alias records for domainName → this CloudFront distribution. */
+  hostedZoneId?: string
+  /** That zone's name. Defaults to domainName minus its first label (counterdrop.cloudsuggest.in → cloudsuggest.in). */
+  hostedZoneName?: string
   /** Extra browser origins allowed to upload (e.g. the CloudFront address after moving to the custom domain). */
   extraOrigins?: string[]
   /** Where alarm and budget emails go. */
@@ -51,6 +57,13 @@ export class CounterDropStack extends Stack {
     if (props.realtimeKey.length < 32) throw new Error('CD_REALTIME_KEY must be at least 32 characters')
     if (props.originSecret.length < 32) throw new Error('CD_ORIGIN_SECRET must be at least 32 characters')
     if (!!props.domainName !== !!props.certificateArn) throw new Error('Set both DOMAIN_NAME and CERTIFICATE_ARN, or neither')
+    if (props.hostedZoneId && !props.domainName) throw new Error('HOSTED_ZONE_ID needs DOMAIN_NAME and CERTIFICATE_ARN')
+    const zoneName = props.hostedZoneId
+      ? (props.hostedZoneName || props.domainName!.split('.').slice(1).join('.')).replace(/\.$/, '')
+      : undefined
+    if (zoneName && !props.domainName!.endsWith(`.${zoneName}`) && props.domainName !== zoneName) {
+      throw new Error(`DOMAIN_NAME ${props.domainName} is not inside hosted zone ${zoneName}`)
+    }
 
     // ── Data ───────────────────────────────────────────────────────────────────────────────
     const table = new ddb.Table(this, 'Main', {
@@ -357,10 +370,21 @@ export class CounterDropStack extends Stack {
       })
     }
 
+    // ── DNS (optional) ──────────────────────────────────────────────────────────────────────
+    // The zone is shared by every app on the domain; this stack only owns its own name's records.
+    // deleteExisting replaces a record made by hand (e.g. an old A record) instead of failing the deploy.
+    if (props.hostedZoneId && zoneName) {
+      const zone = route53.HostedZone.fromHostedZoneAttributes(this, 'Zone', { hostedZoneId: props.hostedZoneId, zoneName })
+      const target = route53.RecordTarget.fromAlias(new r53targets.CloudFrontTarget(distribution))
+      const recordName = `${props.domainName}.`
+      new route53.ARecord(this, 'SiteA', { zone, recordName, target, deleteExisting: true, comment: 'Counter Drop (managed by CDK)' })
+      new route53.AaaaRecord(this, 'SiteAAAA', { zone, recordName, target, deleteExisting: true, comment: 'Counter Drop (managed by CDK)' })
+    }
+
     // ── Outputs ─────────────────────────────────────────────────────────────────────────────
     const cfUrl = `https://${distribution.distributionDomainName}`
     new CfnOutput(this, 'SiteUrl', { value: props.domainName ? `https://${props.domainName}` : cfUrl })
-    new CfnOutput(this, 'CloudFrontUrl', { value: cfUrl, description: 'Point the custom domain CNAME here' })
+    new CfnOutput(this, 'CloudFrontUrl', { value: cfUrl, description: props.hostedZoneId ? 'DNS alias managed by this stack' : 'Point the custom domain CNAME here' })
     new CfnOutput(this, 'WebSocketUrl', { value: wsUrl })
     new CfnOutput(this, 'HttpApiUrl', { value: `https://${apiHost}`, description: 'Refuses requests without X-Origin-Verify (use the site URL)' })
     new CfnOutput(this, 'TableName', { value: table.tableName })

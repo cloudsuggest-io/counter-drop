@@ -8,6 +8,8 @@ name: Deploy to AWS
 #              CD_REALTIME_KEY, CD_ORIGIN_SECRET          (each: `openssl rand -hex 32`; never change casually)
 #   Variables: AWS_REGION (default ap-south-1), ALARM_EMAIL, MONTHLY_BUDGET_USD (default 10),
 #              DOMAIN_NAME + CERTIFICATE_ARN (optional, add later), VITE_OPERATOR_NAME, VITE_SUPPORT_EMAIL
+#              HOSTED_ZONE_ID (optional: Route 53 zone of the domain; the stack then creates the DNS alias itself)
+#              HOSTED_ZONE_NAME (optional: only if the zone is not DOMAIN_NAME minus its first label)
 
 on:
   workflow_dispatch:
@@ -104,6 +106,8 @@ jobs:
           MONTHLY_BUDGET_USD: ${{ vars.MONTHLY_BUDGET_USD || '10' }}
           DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
           CERTIFICATE_ARN: ${{ vars.CERTIFICATE_ARN }}
+          HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
+          HOSTED_ZONE_NAME: ${{ vars.HOSTED_ZONE_NAME }}
         run: |
           output() { aws cloudformation describe-stacks --stack-name "$STACK" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text 2>/dev/null | grep -v '^None$' || true; }
           deploy() { npx cdk deploy "$STACK" --require-approval never --outputs-file outputs.json; }

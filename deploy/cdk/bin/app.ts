@@ -21,6 +21,8 @@ new CounterDropStack(app, env('CD_STACK_NAME', 'CounterDrop'), {
   publicUrl: env('DOMAIN_NAME') ? `https://${env('DOMAIN_NAME')}` : env('CD_PUBLIC_URL') || undefined,
   domainName: env('DOMAIN_NAME') || undefined,
   certificateArn: env('CERTIFICATE_ARN') || undefined,
+  hostedZoneId: env('HOSTED_ZONE_ID') || undefined,
+  hostedZoneName: env('HOSTED_ZONE_NAME') || undefined,
   extraOrigins: env('CD_EXTRA_ORIGINS').split(',').map((o) => o.trim()).filter(Boolean),
   alarmEmail: env('ALARM_EMAIL') || undefined,
   monthlyBudgetUsd: Number(env('MONTHLY_BUDGET_USD', '10')),

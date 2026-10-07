@@ -50,7 +50,7 @@ The workflow only runs `cdk bootstrap` when the `CDKToolkit` stack is missing. I
 | Variable | `ALARM_EMAIL` | where alarms and budget alerts go (confirm the SNS email after the first deploy) |
 | Variable | `MONTHLY_BUDGET_USD` | `10` |
 | Variable | `VITE_OPERATOR_NAME`, `VITE_SUPPORT_EMAIL` | shown on the privacy/terms pages |
-| Variable | `DOMAIN_NAME`, `CERTIFICATE_ARN` | leave empty for the first deploy (step 5) |
+| Variable | `DOMAIN_NAME`, `CERTIFICATE_ARN`, `HOSTED_ZONE_ID` | leave empty for the first deploy (step 5) |
 
 Keep the repository **private**: the Admin workflow prints one-time setup links in its log.
 
@@ -61,10 +61,27 @@ the site loads, a deep link loads, the API answers through CloudFront, and the A
 Then Actions → **Admin** → `create-shop` (slug, shop name, owner, address). Open the printed setup link on the owner's phone to set a PIN.
 
 ### 5. Custom domain `counterdrop.cloudsuggest.in` (when ready)
-1. AWS console, region **N. Virginia (us-east-1)** → Certificate Manager → Request public certificate → `counterdrop.cloudsuggest.in`, DNS validation.
-2. At whoever hosts `cloudsuggest.in` DNS, add the validation CNAME ACM shows. Wait for "Issued".
-3. Set repo variables `DOMAIN_NAME=counterdrop.cloudsuggest.in`, `CERTIFICATE_ARN=<the ARN>` and run Deploy.
-4. Add DNS `CNAME counterdrop → <CloudFrontUrl output>` (e.g. `d1234.cloudfront.net`).
+`cloudsuggest.in` is a Route 53 hosted zone shared by several apps (e.g. `housing.cloudsuggest.in`). Each app's stack
+creates only its own A/AAAA alias records; the zone and the certificate are shared.
+
+1. AWS console, region **N. Virginia (us-east-1)** → Certificate Manager → Request public certificate with
+   `*.cloudsuggest.in` and `cloudsuggest.in`, DNS validation → **Create records in Route 53**. Wait for "Issued".
+   One certificate serves every app on the domain (one level deep: `x.cloudsuggest.in`, not `a.x.cloudsuggest.in`).
+2. Route 53 → Hosted zones → `cloudsuggest.in` → copy the **Hosted zone ID** (`Z…`).
+3. Set repo variables and run Deploy:
+   - `DOMAIN_NAME=counterdrop.cloudsuggest.in`
+   - `CERTIFICATE_ARN=<the ARN>`
+   - `HOSTED_ZONE_ID=<the zone ID>`
+   The stack adds the domain to CloudFront and creates `counterdrop` A + AAAA alias records. A record of the same
+   name made by hand is replaced (`deleteExisting`), so no console edits are needed. Leave `HOSTED_ZONE_ID` empty to
+   manage DNS yourself: then add `CNAME counterdrop → <CloudFrontUrl output>` at your DNS host.
+4. Check: `dig +short counterdrop.cloudsuggest.in` shows CloudFront addresses and `https://counterdrop.cloudsuggest.in` loads.
+
+Set `HOSTED_ZONE_NAME` only when the zone is not the domain minus its first label (e.g. domain
+`app.shop.example.com` in zone `example.com`).
+
+Another app on the same domain: reuse `CERTIFICATE_ARN` and `HOSTED_ZONE_ID`, but give it its own stack name, table
+names and `DOMAIN_NAME`. Two CloudFront distributions cannot claim the same name.
 
 Setup links and QR codes use the site URL, so make this switch **before printing QR codes** for shops.
 Live updates stay on the API Gateway `execute-api` address (no second certificate needed).

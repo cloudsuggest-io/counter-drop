@@ -78,6 +78,21 @@ test('custom domain needs both name and certificate', () => {
   t.hasResourceProperties('AWS::S3::Bucket', { CorsConfiguration: { CorsRules: [Match.objectLike({ AllowedOrigins: ['https://counterdrop.cloudsuggest.in'] })] } })
 })
 
+test('hosted zone: stack owns A + AAAA alias records for its own name only', () => {
+  const dom = { domainName: 'counterdrop.cloudsuggest.in', certificateArn: 'arn:aws:acm:us-east-1:123456789012:certificate/abc', publicUrl: 'https://counterdrop.cloudsuggest.in' }
+  assert.equal(Object.keys(synth(dom).findResources('AWS::Route53::RecordSet')).length, 0, 'no zone id → no records')
+  const t = synth({ ...dom, hostedZoneId: 'Z0123456789ABC' })
+  for (const Type of ['A', 'AAAA']) {
+    t.hasResourceProperties('AWS::Route53::RecordSet', {
+      HostedZoneId: 'Z0123456789ABC', Name: 'counterdrop.cloudsuggest.in.', Type,
+      AliasTarget: Match.objectLike({ HostedZoneId: Match.anyValue(), DNSName: Match.anyValue() }),
+    })
+  }
+  t.resourceCountIs('AWS::Route53::RecordSet', 2)
+  assert.throws(() => synth({ hostedZoneId: 'Z0123456789ABC' }), /HOSTED_ZONE_ID/)
+  assert.throws(() => synth({ ...dom, hostedZoneId: 'Z0123456789ABC', hostedZoneName: 'example.com' }), /not inside/)
+})
+
 test('short secrets are refused', () => {
   assert.throws(() => synth({ realtimeKey: 'short' }), /CD_REALTIME_KEY/)
   assert.throws(() => synth({ originSecret: 'short' }), /CD_ORIGIN_SECRET/)
