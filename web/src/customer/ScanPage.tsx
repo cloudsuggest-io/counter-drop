@@ -147,7 +147,7 @@ export default function ScanPage() {
         <input
           value={manual}
           onChange={(e) => setManual(e.target.value)}
-          placeholder="imran-xerox"
+          placeholder="xerox"
           aria-label={t('scanManual')}
           autoCapitalize="none"
           autoCorrect="off"

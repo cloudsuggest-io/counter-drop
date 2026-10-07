@@ -1,6 +1,6 @@
 # Changes from the Stitch export (mobile_shop_mode_queue)
 
-- text: "Dadar Central Kiosk" → "Imran Xerox · Dadar West" (1x)
+- text: "Dadar Central Kiosk" → "Xerox · Dadar West" (1x)
 - text: "COUNTER DROP" → "WALK-IN" (2x)
 - text: "2 files • 16 sides B/W Duplex (A4)" → "2 files • 16 pages B/W both sides (A4)" (1x)
 - text: "₹18.00 Due" → "₹24.00 due" (1x)

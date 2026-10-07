@@ -40,15 +40,7 @@ export function Chip({ children, tone = 'neutral', className = '' }: { children:
 }
 
 export function Logo({ size = 40 }: { size?: number }) {
-  return (
-    <svg viewBox="0 0 120 120" width={size} height={size} role="img" aria-label="Counter Drop" className="shrink-0">
-      <rect width="120" height="120" rx="16" fill="#0F172A" />
-      <path d="M34 26C34 22.69 36.69 20 40 20H66L86 40V94C86 97.31 83.31 100 80 100H40C36.69 100 34 97.31 34 94V26Z" fill="#fff" />
-      <path d="M66 20V38C66 39.1 66.9 40 68 40H86L66 20Z" fill="#CBD5E1" />
-      <path d="M60 48V78M60 78L48 66M60 78L72 66" stroke="#2563EB" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-      <line x1="44" y1="88" x2="76" y2="88" stroke="#0F172A" strokeWidth="4" strokeLinecap="round" />
-    </svg>
-  )
+  return <img src="/icon.svg" width={size} height={size} alt="Counter Drop" className="shrink-0 rounded-[22%]" />
 }
 
 export function LangSwitch() {

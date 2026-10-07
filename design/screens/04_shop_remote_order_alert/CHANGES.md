@@ -1,6 +1,6 @@
 # Changes from the Stitch export (mobile_remote_order_review)
 
-- text: "Dadar Central Kiosk" → "Imran Xerox · Dadar West" (1x)
+- text: "Dadar Central Kiosk" → "Xerox · Dadar West" (1x)
 - text: "Slot #DDR-R08" → "Order #4921" (1x)
 - text: "Auto-Refund Expiry" → "Accept within 5 min" (1x)
 - removed "4th order" (+0 up) — no customer profiling

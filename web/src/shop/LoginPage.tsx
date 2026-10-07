@@ -80,7 +80,7 @@ export default function LoginPage() {
               onChange={(e) => setSlug(e.target.value)}
               autoCapitalize="none"
               autoCorrect="off"
-              placeholder="imran-xerox"
+              placeholder="xerox"
               className="mt-2 h-12 w-full rounded border-[1.5px] border-line bg-surface px-3 font-mono"
             />
             <p className="mt-1 text-xs text-ink-muted">
