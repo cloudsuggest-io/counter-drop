@@ -87,3 +87,10 @@ body {
     max-width: none;
   }
 }
+
+/* Keep dark bands and coloured chips when printing (browsers drop backgrounds by default). */
+.print-exact,
+.print-exact * {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
