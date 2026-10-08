@@ -1,6 +1,7 @@
 name: Admin
 
-# Runs cdadmin against the production DynamoDB table — create the first shop, invite staff, reset a PIN.
+# Runs cdadmin against the production DynamoDB table — create the first shop, invite staff, reset a PIN —
+# or "stats" to count each shop's transfers (read-only, deploy/shop-stats.sh).
 # The printed setup link is a one-time secret (valid 48 h): keep this repository private, send the link
 # to the person directly, and re-issue it (reset-pin) if it leaks.
 
@@ -10,9 +11,9 @@ on:
       command:
         description: What to do
         type: choice
-        options: [create-shop, add-staff, reset-pin, remove-staff, list-staff]
+        options: [stats, create-shop, add-staff, reset-pin, remove-staff, list-staff]
       shop:
-        description: Shop link name (slug), e.g. imran-xerox — printed on the QR, can't change later
+        description: Shop link name (slug), e.g. imran-xerox — printed on the QR, can't change later. For stats, "all" or one slug
         required: true
       name:
         description: create-shop → shop name; other commands → the person's first name
@@ -67,6 +68,12 @@ jobs:
         run: |
           out() { aws cloudformation describe-stacks --stack-name "$STACK" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
           export CD_ENV=prod CD_DYNAMODB_TABLE="$(out TableName)" CD_PUBLIC_WEB_URL="$(out SiteUrl)"
+          if [ "$CMD" = stats ]; then
+            # Read-only: transfers per shop (jobs, files, pages). Also shown on the run's summary page.
+            bash ../deploy/shop-stats.sh "$CD_DYNAMODB_TABLE" "$SHOP" | tee stats.txt
+            { echo '```'; cat stats.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           case "$CMD" in
             create-shop)  args=(-slug "$SHOP" -name "$NAME" -owner "$OWNER" -address "$ADDRESS") ;;
             add-staff)    args=(-shop "$SHOP" -name "$NAME" -role "$ROLE") ;;
