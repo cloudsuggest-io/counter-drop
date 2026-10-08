@@ -61,9 +61,11 @@ export function useInstall(): InstallState {
     install: async () => {
       if (!deferred) return
       await deferred.prompt()
-      const choice = await deferred.userChoice
+      await deferred.userChoice
+      // A prompt event can only be used once. If they backed out of the native dialog we don't snooze —
+      // the browser fires a fresh `beforeinstallprompt` on the next page load and the button comes back.
+      // Only an explicit "Not now" (dismiss) snoozes the card.
       deferred = null
-      if (choice.outcome === 'dismissed') store.set(SNOOZE, String(Date.now() + 14 * 24 * 3600 * 1000))
       notify()
     },
     dismiss: () => {
