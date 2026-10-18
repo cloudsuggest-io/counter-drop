@@ -35,8 +35,8 @@
         { "name": "CD_UNDO_WINDOW", "value": "10m" },
         { "name": "CD_ABANDON_AFTER", "value": "60m" },
         { "name": "CD_DELETION_INTERVAL", "value": "30s" },
-        { "name": "CD_MAX_FILE_MB", "value": "25" },
-        { "name": "CD_MAX_JOB_MB", "value": "50" },
+        { "name": "CD_MAX_FILE_MB", "value": "500" },
+        { "name": "CD_MAX_JOB_MB", "value": "500" },
         { "name": "CD_MAX_FILES", "value": "20" },
         { "name": "CD_SESSION_TTL", "value": "12h" },
         { "name": "CD_SETUP_LINK_TTL", "value": "48h" }

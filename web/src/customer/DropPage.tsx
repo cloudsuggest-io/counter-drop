@@ -13,8 +13,8 @@ import { InstallCard } from '@/components/InstallCard'
 import { LegalLinks } from './LegalPages'
 
 const MAX_FILES = 20
-const MAX_FILE_MB = 25
-const MAX_JOB_MB = 50
+const MAX_FILE_MB = 500
+const MAX_JOB_MB = 500
 
 type Status = 'checking' | 'uploading' | 'waiting' | 'done' | 'error' | 'locked'
 interface LocalFile {
