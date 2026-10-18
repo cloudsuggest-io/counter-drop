@@ -25,12 +25,13 @@ type publicShop struct {
 	ColourAvailable bool                `json:"colourAvailable"`
 	Wait            domain.WaitEstimate `json:"wait"`
 	HoldDays        int                 `json:"holdDays"`
+	Orders          publicOrders        `json:"orders"`
 }
 
 func toPublic(sh domain.Shop, wait domain.WaitEstimate) publicShop {
 	return publicShop{ID: sh.ID, Slug: sh.Slug, Name: sh.Name, Address: sh.Address, OnlineState: sh.OnlineState,
 		PauseMessage: sh.PauseMessage, IsOpen: sh.IsOpen(time.Now()), OpensAt: sh.OpensAt, ClosesAt: sh.ClosesAt,
-		Prices: sh.Prices, ColourAvailable: sh.Prices.ColourAvailable(), Wait: wait, HoldDays: sh.HoldDays}
+		Prices: sh.Prices, ColourAvailable: sh.Prices.ColourAvailable(), Wait: wait, HoldDays: sh.HoldDays, Orders: toPublicOrders(sh.Orders)}
 }
 
 func (s *Server) getShop(w http.ResponseWriter, r *http.Request) {

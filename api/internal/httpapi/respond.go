@@ -84,6 +84,12 @@ func mapError(err error) (int, string, string) {
 		return 422, "option_unavailable", "This shop doesn't offer colour printing."
 	case errors.Is(err, domain.ErrPriceRequired):
 		return 422, "price_required", "Enter the price for the Other files before marking this ready."
+	case errors.Is(err, domain.ErrOrderState):
+		return 409, "order_state", "That isn't possible for this order right now."
+	case errors.Is(err, domain.ErrBalanceDue):
+		return 422, "balance_due", "Collect the balance (cash or UPI) to deliver this order."
+	case errors.Is(err, domain.ErrCoverRequired):
+		return 422, "cover_required", "The customer hasn't approved the proof (cover or print text) yet."
 	case errors.Is(err, domain.ErrPagesRequired):
 		return 422, "pages_required", "Enter the page count for each document before marking this ready."
 	case errors.Is(err, domain.ErrValidation):

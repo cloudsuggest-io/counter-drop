@@ -3,9 +3,28 @@
     {
       "ID": "counter-drop-deletion-backstop",
       "Status": "Enabled",
-      "Filter": { "Prefix": "cd/" },
-      "Expiration": { "Days": 8 },
-      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 }
+      "Filter": {
+        "Prefix": "cd/"
+      },
+      "Expiration": {
+        "Days": 8
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      }
+    },
+    {
+      "ID": "counter-drop-order-deletion-backstop",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "ord/"
+      },
+      "Expiration": {
+        "Days": 8
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      }
     }
   ]
 }

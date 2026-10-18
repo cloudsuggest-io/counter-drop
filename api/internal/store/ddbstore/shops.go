@@ -24,6 +24,7 @@ func (r shopRec) shop() domain.Shop {
 	if sh.Lanes == nil {
 		sh.Lanes = []domain.Lane{}
 	}
+	sh.Orders = sh.Orders.Normalise()
 	return sh
 }
 

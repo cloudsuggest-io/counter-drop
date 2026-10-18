@@ -49,12 +49,29 @@ func (s *Store) ClaimDueFiles(ctx context.Context, limit int) ([]store.DueFile, 
 			}
 		}
 	}
+	orders, err := s.dueOrders(ctx, now)
+	if err != nil {
+		return out, err
+	}
+	for _, r := range orders {
+		for _, f := range r.Files {
+			if len(out) == limit {
+				return out, nil
+			}
+			if dueNow(f, now) {
+				out = append(out, store.DueFile{ID: f.F.ID, OrderID: r.Order.ID, Key: f.F.ObjectKey})
+			}
+		}
+	}
 	return out, nil
 }
 
 // MarkFileDeleted records a successful delete and drops the file name. When every file of the job
 // is gone, the customer's name is cleared too (BR-D4).
 func (s *Store) MarkFileDeleted(ctx context.Context, due store.DueFile) (string, bool, error) {
+	if due.OrderID != "" {
+		return s.markOrderFileDeleted(ctx, due)
+	}
 	done := false
 	r, err := s.mutateJob(ctx, due.JobID, func(r *jobRec, now time.Time) (*jobEvent, error) {
 		f := r.file(due.ID)
@@ -98,6 +115,9 @@ func (s *Store) countDeleted(ctx context.Context) {
 
 // MarkFileDeleteFailed schedules a retry with backoff (1, 5, 15 minutes).
 func (s *Store) MarkFileDeleteFailed(ctx context.Context, due store.DueFile, cause error) (int, error) {
+	if due.OrderID != "" {
+		return s.markOrderFileFailed(ctx, due, cause)
+	}
 	attempts := 0
 	_, err := s.mutateJob(ctx, due.JobID, func(r *jobRec, now time.Time) (*jobEvent, error) {
 		f := r.file(due.ID)
@@ -190,6 +210,23 @@ func (s *Store) DeletionHealth(ctx context.Context) (store.DeletionHealth, error
 			if h.OldestUndeleted == nil || f.CreatedAt.Before(*h.OldestUndeleted) {
 				t := f.CreatedAt
 				h.OldestUndeleted = &t
+			}
+		}
+	}
+	orders, err := s.dueOrders(ctx, time.Time{})
+	if err != nil {
+		return h, err
+	}
+	for _, r := range orders {
+		for _, f := range r.Files {
+			if f.F.DeletedAt != nil {
+				continue
+			}
+			if f.F.DeleteAfter != nil && !f.F.DeleteAfter.After(now) {
+				h.DueNow++
+			}
+			if f.F.DeleteStatus == domain.DeleteStatusFailed {
+				h.Failed++
 			}
 		}
 	}

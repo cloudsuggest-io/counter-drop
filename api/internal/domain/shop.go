@@ -18,19 +18,20 @@ type Lane struct {
 }
 
 type Shop struct {
-	ID           string      `json:"id"`
-	Slug         string      `json:"slug"`
-	Name         string      `json:"name"`
-	Address      string      `json:"address,omitempty"`
-	Status       string      `json:"status"` // live | suspended
-	OnlineState  OnlineState `json:"onlineState"`
-	PauseMessage string      `json:"pauseMessage,omitempty"`
-	Timezone     string      `json:"timezone"`
-	OpensAt      string      `json:"opensAt"`  // "09:00" local
-	ClosesAt     string      `json:"closesAt"` // "21:30" local
-	Prices       PriceList   `json:"prices"`
-	Lanes        []Lane      `json:"lanes"`
-	HoldDays     int         `json:"holdDays"` // uncollected jobs close after this many days (1–7)
+	ID           string        `json:"id"`
+	Slug         string        `json:"slug"`
+	Name         string        `json:"name"`
+	Address      string        `json:"address,omitempty"`
+	Status       string        `json:"status"` // live | suspended
+	OnlineState  OnlineState   `json:"onlineState"`
+	PauseMessage string        `json:"pauseMessage,omitempty"`
+	Timezone     string        `json:"timezone"`
+	OpensAt      string        `json:"opensAt"`  // "09:00" local
+	ClosesAt     string        `json:"closesAt"` // "21:30" local
+	Prices       PriceList     `json:"prices"`
+	Lanes        []Lane        `json:"lanes"`
+	HoldDays     int           `json:"holdDays"` // uncollected jobs close after this many days (1–7)
+	Orders       OrderSettings `json:"orders"`   // blackbook price list and defaults
 }
 
 // Location returns the shop's time zone, falling back to IST.

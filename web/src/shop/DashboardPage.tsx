@@ -106,6 +106,11 @@ function csvFor(d: Dashboard, shopName: string): string {
     ['Cash (₹)', r(d.earnings.cashPaise)],
     ['UPI (₹)', r(d.earnings.upiPaise)],
     ['Not recorded (₹)', r(d.earnings.unrecordedPaise)],
+    ['From orders (₹)', r(d.earnings.ordersPaise)],
+    ['Order advances (₹)', r(d.orders.advancePaise)],
+    ['Order balances (₹)', r(d.orders.balancePaise)],
+    ['Order refunds (₹)', r(d.orders.refundPaise)],
+    ['Orders: still to collect (₹)', r(d.orders.pendingPaise)],
     [`Earnings ${d.previous.label} (₹)`, r(d.previous.paise)],
     ['Jobs sent', d.jobs.submitted],
     ['Jobs collected', d.jobs.collected],
@@ -283,6 +288,7 @@ function Body({ d }: { d: Dashboard }) {
           <span className="text-xs text-ink-muted">
             vs {money(d.previous.paise)} {d.previous.label}
             {d.days === 1 ? ' (same time)' : ''}
+            {e.ordersPaise !== 0 && <> · incl. {money(e.ordersPaise)} from orders</>}
           </span>
           <Split
             label={`Cash ${money(e.cashPaise)}, UPI ${money(e.upiPaise)}, not recorded ${money(e.unrecordedPaise)}`}
@@ -513,6 +519,44 @@ function Body({ d }: { d: Dashboard }) {
           )}
         </Panel>
       </div>
+
+      {/* Orders that take days: money taken in the period, and the open book right now */}
+      {(d.orders.open > 0 || d.orders.advancePaise > 0 || d.orders.balancePaise > 0 || d.orders.refundPaise > 0) && (
+        <Panel
+          title="Orders (blackbooks, binding, cards…)"
+          right={
+            <Link to="/shop/orders" className="font-semibold text-action hover:underline">
+              Open orders →
+            </Link>
+          }
+        >
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded bg-surface-tint p-3">
+              <div className="text-xs text-ink-muted">Advances {period}</div>
+              <div className="font-mono text-xl font-bold">{money(d.orders.advancePaise)}</div>
+            </div>
+            <div className="rounded bg-surface-tint p-3">
+              <div className="text-xs text-ink-muted">Balances {period}</div>
+              <div className="font-mono text-xl font-bold">{money(d.orders.balancePaise)}</div>
+            </div>
+            <div className="rounded bg-surface-tint p-3">
+              <div className="text-xs text-ink-muted">Still to collect</div>
+              <div className={`font-mono text-xl font-bold ${d.orders.pendingPaise > 0 ? 'text-attention' : ''}`}>{money(d.orders.pendingPaise)}</div>
+            </div>
+            <div className="rounded bg-surface-tint p-3">
+              <div className="text-xs text-ink-muted">Open orders</div>
+              <div className="font-mono text-xl font-bold">{d.orders.open}</div>
+            </div>
+          </div>
+          <div className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-4">
+            <Row label="Need a price" value={d.orders.needQuote} tone={d.orders.needQuote ? 'text-attention' : ''} />
+            <Row label="Due today" value={d.orders.dueToday} tone={d.orders.dueToday ? 'text-action' : ''} />
+            <Row label="Late" value={d.orders.overdue} tone={d.orders.overdue ? 'text-danger' : ''} />
+            <Row label="Ready for pickup" value={d.orders.ready} tone={d.orders.ready ? 'text-ready' : ''} />
+          </div>
+          {d.orders.refundPaise > 0 && <p className="text-xs text-ink-muted">Refunded {period}: {money(d.orders.refundPaise)} (already taken off the earnings).</p>}
+        </Panel>
+      )}
 
       {/* Needs a look */}
       <Panel title="Needs a look" right={problems === 0 ? 'All clear' : undefined}>

@@ -34,6 +34,20 @@ type Dashboard struct {
 	Problems Problems   `json:"problems"`
 	// FilesDeleted is how many customer files were erased in the period.
 	FilesDeleted int `json:"filesDeleted"`
+	// Orders are multi-day orders (blackbooks): money taken in the period and the open book now.
+	Orders OrderStats `json:"orders"`
+}
+
+type OrderStats struct {
+	AdvancePaise int64 `json:"advancePaise"` // advances taken in the period
+	BalancePaise int64 `json:"balancePaise"` // balances collected in the period
+	RefundPaise  int64 `json:"refundPaise"`  // refunds given in the period (positive number)
+	Open         int   `json:"open"`
+	NeedQuote    int   `json:"needQuote"`
+	DueToday     int   `json:"dueToday"`
+	Overdue      int   `json:"overdue"`
+	Ready        int   `json:"ready"`
+	PendingPaise int64 `json:"pendingPaise"` // still to collect on open orders
 }
 
 type Earnings struct {
@@ -42,6 +56,7 @@ type Earnings struct {
 	UPIPaise        int64 `json:"upiPaise"`
 	UnrecordedPaise int64 `json:"unrecordedPaise"` // collected without marking cash or UPI
 	UnrecordedJobs  int   `json:"unrecordedJobs"`
+	OrdersPaise     int64 `json:"ordersPaise"` // part of the total that came from blackbook orders (advances + balances − refunds)
 }
 
 // Comparison is the same measure for the earlier period. For "today" it is the same weekday
@@ -133,6 +148,8 @@ type DashboardInput struct {
 	Jobs            []domain.Job // jobs sent on the days DashboardDays returns
 	Open            []domain.Job // jobs in line, printing or ready now
 	CopiesToConfirm int
+	Payments        []OrderPaymentRow // order payments recorded on the days DashboardDays returns
+	OpenOrders      []domain.Order
 }
 
 // dashboardShape returns the series length and how far back the comparison period starts.
@@ -233,7 +250,7 @@ func BuildDashboard(in DashboardInput) Dashboard {
 	}
 	printSecs := map[string]int64{}
 
-	var waitSum, printSum, pickupSum int64
+	var waitSum, printSum, pickupSum, jobPaise int64
 	var waitN, printN, pickupN, quick int
 
 	seen := map[string]bool{}
@@ -262,6 +279,7 @@ func BuildDashboard(in DashboardInput) Dashboard {
 			cday := dayOf(j.CollectedAt)
 			if period[cday] {
 				d.Jobs.Collected++
+				jobPaise += j.PriceTotal
 				d.Earnings.TotalPaise += j.PriceTotal
 				d.Jobs.MaxBillPaise = max(d.Jobs.MaxBillPaise, j.PriceTotal)
 				who := staffRow(firstNonEmpty(j.CollectedBy, j.ClaimedBy))
@@ -343,7 +361,65 @@ func BuildDashboard(in DashboardInput) Dashboard {
 	}
 
 	if d.Jobs.Collected > 0 {
-		d.Jobs.AvgBillPaise = d.Earnings.TotalPaise / int64(d.Jobs.Collected)
+		d.Jobs.AvgBillPaise = jobPaise / int64(d.Jobs.Collected)
+	}
+
+	// Order money counts on the day it was paid, so advances show in that day's till.
+	for _, p := range in.Payments {
+		day := domain.BusinessDay(p.At, loc)
+		at := p.At
+		if period[day] {
+			d.Earnings.TotalPaise += p.Paise
+			d.Earnings.OrdersPaise += p.Paise
+			who := staffRow(p.By)
+			switch p.Method {
+			case "cash":
+				d.Earnings.CashPaise += p.Paise
+				who.CashPaise += p.Paise
+			case "upi":
+				d.Earnings.UPIPaise += p.Paise
+				who.UPIPaise += p.Paise
+			}
+			switch p.Kind {
+			case domain.PayAdvance:
+				d.Orders.AdvancePaise += p.Paise
+			case domain.PayBalance:
+				d.Orders.BalancePaise += p.Paise
+			case domain.PayRefund:
+				d.Orders.RefundPaise -= p.Paise
+			}
+		}
+		if inPrev(&at) {
+			d.Previous.Paise += p.Paise
+		}
+		if i, ok := seriesIdx[day]; ok {
+			d.Series[i].Paise += p.Paise
+		}
+		if i, ok := prevIdx[day]; ok {
+			d.Series[i].PrevPaise += p.Paise
+		}
+	}
+	for _, o := range in.OpenOrders {
+		if !o.State.Open() || !o.State.Visible() {
+			continue
+		}
+		d.Orders.Open++
+		switch {
+		case o.State == domain.OrderRequested:
+			d.Orders.NeedQuote++
+		case o.State == domain.OrderReady:
+			d.Orders.Ready++
+		}
+		if o.State != domain.OrderReady {
+			if o.DueDate == d.To {
+				d.Orders.DueToday++
+			} else if o.DueDate < d.To {
+				d.Orders.Overdue++
+			}
+		}
+		if o.State != domain.OrderRequested {
+			d.Orders.PendingPaise += o.BalancePaise()
+		}
 	}
 	d.Speed = SpeedStats{WaitSec: avg(waitSum, waitN), PrintSec: avg(printSum, printN), PickupSec: avg(pickupSum, pickupN)}
 	readyN := 0

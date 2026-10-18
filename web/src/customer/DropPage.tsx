@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { AlertTriangle, FileText, FileType, Image as ImageIcon, Plus, ShieldCheck, Trash2, WifiOff, Clock, RotateCw } from 'lucide-react'
+import { AlertTriangle, BookOpen, FileText, FileType, Image as ImageIcon, Plus, ShieldCheck, Trash2, WifiOff, Clock, RotateCw } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import { rupees, hhmm, bytes } from '@/lib/format'
@@ -558,6 +558,18 @@ export default function DropPage() {
           )}
 
           <div className="lg:hidden">{files.length === 0 && privacy}</div>
+          {files.length === 0 && shop.orders.enabled && shop.orders.services.length > 0 && (
+            <Link to={`/s/${slug}/order`} className="flex items-center gap-3 rounded border-[1.5px] border-line bg-surface p-4 hover:border-action">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-ink text-[#E8C872]">
+                <BookOpen className="h-6 w-6" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold">{t('bbEntryTitle')}</span>
+                <span className="block text-sm text-ink-muted">{t('bbEntryText')}</span>
+              </span>
+              <span className="hidden shrink-0 font-semibold text-action sm:block">{t('bbEntryCta')} →</span>
+            </Link>
+          )}
           {files.length === 0 && <InstallCard compact />}
         </div>
 

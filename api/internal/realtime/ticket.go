@@ -49,7 +49,7 @@ func VerifyTicket(key []byte, ticket string, now time.Time) (string, error) {
 	if err := json.Unmarshal(body, &t); err != nil || t.Topic == "" || now.Unix() > t.Expiry {
 		return "", ErrBadTicket
 	}
-	if !strings.HasPrefix(t.Topic, "job:") && !strings.HasPrefix(t.Topic, "shop:") {
+	if !strings.HasPrefix(t.Topic, "job:") && !strings.HasPrefix(t.Topic, "shop:") && !strings.HasPrefix(t.Topic, "order:") {
 		return "", ErrBadTicket
 	}
 	return t.Topic, nil

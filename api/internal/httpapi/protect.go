@@ -111,6 +111,9 @@ var limitRules = []limitRule{
 	{"create-job", 10, 6, func(r *http.Request) bool {
 		return r.Method == "POST" && strings.HasPrefix(r.URL.Path, apiPrefix+"/shops/") && strings.HasSuffix(r.URL.Path, "/jobs")
 	}, true},
+	{"create-order", 10, 6, func(r *http.Request) bool {
+		return r.Method == "POST" && strings.HasPrefix(r.URL.Path, apiPrefix+"/shops/") && strings.HasSuffix(r.URL.Path, "/orders")
+	}, true},
 	{"upload", 60, 30, func(r *http.Request) bool {
 		return r.Method == "PUT" && strings.HasPrefix(r.URL.Path, apiPrefix+"/files/")
 	}, false},
@@ -118,7 +121,7 @@ var limitRules = []limitRule{
 		return r.Method == "GET" && (strings.HasSuffix(r.URL.Path, "/events") || r.URL.Path == apiPrefix+"/ws")
 	}, false},
 	{"guest-write", 120, 60, func(r *http.Request) bool {
-		return r.Method != "GET" && strings.HasPrefix(r.URL.Path, apiPrefix+"/jobs/")
+		return r.Method != "GET" && (strings.HasPrefix(r.URL.Path, apiPrefix+"/jobs/") || strings.HasPrefix(r.URL.Path, apiPrefix+"/orders/"))
 	}, false},
 	{"api", 600, 200, func(r *http.Request) bool { return strings.HasPrefix(r.URL.Path, "/api/") }, false},
 }

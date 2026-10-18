@@ -47,7 +47,7 @@ func NewLocalStore(dir, baseURL string, secret []byte, dur Durations) (*LocalSto
 
 func (s *LocalStore) path(key string) (string, error) {
 	clean := filepath.Clean("/" + key)
-	if !strings.HasPrefix(clean, "/cd/") {
+	if !strings.HasPrefix(clean, "/cd/") && !strings.HasPrefix(clean, "/ord/") {
 		return "", fmt.Errorf("invalid key")
 	}
 	return filepath.Join(s.dir, clean), nil

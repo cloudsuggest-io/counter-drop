@@ -42,6 +42,9 @@ func NewHub() *Hub { return &Hub{topics: map[string]map[subscriber]struct{}{}} }
 func JobTopic(id string) string  { return "job:" + id }
 func ShopTopic(id string) string { return "shop:" + id }
 
+// OrderTopic carries updates for one multi-day order (the customer's order page).
+func OrderTopic(id string) string { return "order:" + id }
+
 // Publish sends an event to every subscriber of the topic. Slow subscribers are skipped, not waited on.
 func (h *Hub) Publish(topic string, ev Event) {
 	b, err := json.Marshal(ev)

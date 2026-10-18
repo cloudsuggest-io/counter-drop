@@ -28,6 +28,8 @@ func ChangeEvents(oldImg, newImg map[string]types.AttributeValue) ([]realtime.Me
 		return jobChanges(oldImg, newImg)
 	case "PROFILE":
 		return shopChanges(oldImg, newImg)
+	case "ORDER":
+		return orderChanges(newImg)
 	}
 	return nil, nil
 }
@@ -82,4 +84,18 @@ func shopChanges(oldImg, newImg map[string]types.AttributeValue) ([]realtime.Mes
 		ev = realtime.Event{Type: "shop.state", Data: map[string]any{"onlineState": sh.OnlineState}}
 	}
 	return []realtime.Message{{Topic: realtime.ShopTopic(sh.ID), Event: ev}}, nil
+}
+
+// Order items: order.updated on order:<id>, and orders.changed on shop:<shop> once the shop can see it.
+func orderChanges(newImg map[string]types.AttributeValue) ([]realtime.Message, error) {
+	var r orderRec
+	if err := attributevalue.UnmarshalMap(newImg, &r); err != nil {
+		return nil, err
+	}
+	o := r.Order
+	out := []realtime.Message{{Topic: realtime.OrderTopic(o.ID), Event: realtime.Event{Type: "order.updated", Data: map[string]any{"id": o.ID, "state": o.State}}}}
+	if o.State.Visible() {
+		out = append(out, realtime.Message{Topic: realtime.ShopTopic(o.ShopID), Event: realtime.Event{Type: "orders.changed", Data: map[string]string{"orderId": o.ID}}})
+	}
+	return out, nil
 }

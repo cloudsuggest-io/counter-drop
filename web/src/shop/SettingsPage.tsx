@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import { ArrowLeft, LogOut } from 'lucide-react'
 import { ApiError } from '@/lib/api'
 import { rupees } from '@/lib/format'
-import type { PriceList, Shop } from '@/lib/types'
+import type { OrderSettings, PriceList, Shop } from '@/lib/types'
+import { SERVICES, UNIT_EN } from '@/lib/services'
+import { ServiceIcon } from '@/components/ServiceIcon'
 import { Banner, Button, Card, Spinner } from '@/components/ui'
 import { useShopAuth, useShopTheme } from './auth'
 import { StaffSection } from './StaffSection'
@@ -46,9 +48,13 @@ export default function SettingsPage() {
   const [form, setForm] = useState<Form | null>(null)
   const [msg, setMsg] = useState<{ tone: 'ready' | 'danger'; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [orders, setOrders] = useState<OrderSettings | null>(null)
 
   useEffect(() => {
-    call<Shop>('/shop/settings').then((s) => setForm(fromShop(s)))
+    call<Shop>('/shop/settings').then((s) => {
+      setForm(fromShop(s))
+      setOrders(s.orders)
+    })
   }, [call])
 
   if (!form || !session) {
@@ -105,6 +111,7 @@ export default function SettingsPage() {
       {msg && <Banner tone={msg.tone}>{msg.text}</Banner>}
 
       <div className="space-y-4 lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-start lg:gap-6 lg:space-y-0">
+        <div className="space-y-4">
         <form onSubmit={save} className="space-y-4">
           <Card className="space-y-3 p-4">
             <h2 className="text-lg font-bold">Shop</h2>
@@ -162,6 +169,8 @@ export default function SettingsPage() {
             {busy ? 'Saving…' : 'Save settings'}
           </Button>
         </form>
+        {orders && <OrderSettingsCard initial={orders} input={input} />}
+        </div>
 
         <div className="lg:sticky lg:top-6">
           <StaffSection />
@@ -178,5 +187,130 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       {children}
       {hint && <span className="mt-1 block text-xs font-normal text-ink-muted">{hint}</span>}
     </label>
+  )
+}
+
+const pct = (v: string) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)))
+const DAY_CHOICES = [0, 1, 2, 3, 4, 5, 7, 10, 14]
+
+/** Orders that take days (blackbooks, binding, cards…): which services, prices, advance (PUT /shop/order-settings). */
+function OrderSettingsCard({ initial, input }: { initial: OrderSettings; input: string }) {
+  const { call } = useShopAuth()
+  const toForm = (o: OrderSettings) => ({
+    enabled: o.enabled,
+    hard: toRs(o.hardPaise),
+    spiral: toRs(o.spiralPaise),
+    soft: toRs(o.softPaise),
+    advance: String(o.advancePercent),
+    services: SERVICES.map((d) => {
+      const s = o.services.find((x) => x.id === d.id)
+      return { id: d.id, enabled: !!s?.enabled, price: toRs(s?.unitPaise ?? 0), lead: String(s?.leadDays ?? 1) }
+    }),
+  })
+  const [f, setF] = useState(() => toForm(initial))
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ tone: 'ready' | 'danger'; text: string } | null>(null)
+  const set = (k: 'hard' | 'spiral' | 'soft' | 'advance') => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value })
+  const setSvc = (id: string, p: Partial<(typeof f.services)[number]>) => setF({ ...f, services: f.services.map((s) => (s.id === id ? { ...s, ...p } : s)) })
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setMsg(null)
+    try {
+      const s = await call<OrderSettings>('/shop/order-settings', {
+        method: 'PUT',
+        body: {
+          enabled: f.enabled,
+          hardPaise: toPaise(f.hard),
+          spiralPaise: toPaise(f.spiral),
+          softPaise: toPaise(f.soft),
+          advancePercent: pct(f.advance),
+          services: f.services.map((s) => ({ id: s.id, enabled: s.enabled, unitPaise: toPaise(s.price), leadDays: Number(s.lead) })),
+        },
+      })
+      setF(toForm(s))
+      setMsg({ tone: 'ready', text: 'Saved. New quotes use these prices.' })
+    } catch (err) {
+      setMsg({ tone: 'danger', text: err instanceof ApiError ? err.message : 'Could not save' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={save}>
+      <Card className="space-y-3 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold">Orders that take days</h2>
+            <p className="text-xs text-ink-muted">Blackbooks, binding, cards, banners… You quote, take an advance and collect the balance on delivery.</p>
+          </div>
+          <label className="flex shrink-0 items-center gap-2 text-sm font-semibold">
+            <input type="checkbox" className="h-5 w-5 accent-[var(--action)]" checked={f.enabled} onChange={(e) => setF({ ...f, enabled: e.target.checked })} />
+            Take online
+          </label>
+        </div>
+
+        <div className="divide-y divide-divider rounded border-[1.5px] border-line">
+          {SERVICES.map((d) => {
+            const s = f.services.find((x) => x.id === d.id)!
+            return (
+              <div key={d.id} className={`flex flex-wrap items-center gap-x-3 gap-y-2 p-2.5 ${s.enabled ? '' : 'opacity-60'}`}>
+                <label className="flex min-w-0 flex-1 items-center gap-2 text-sm font-semibold">
+                  <input type="checkbox" className="h-5 w-5 shrink-0 accent-[var(--action)]" checked={s.enabled} onChange={(e) => setSvc(d.id, { enabled: e.target.checked })} />
+                  <ServiceIcon id={d.id} className="h-4 w-4 shrink-0 text-ink-muted" />
+                  <span className="truncate">{d.name}</span>
+                </label>
+                {d.form === 'quantity' && (
+                  <label className="flex items-center gap-1 text-xs text-ink-muted">
+                    ₹
+                    <input
+                      inputMode="decimal"
+                      aria-label={`${d.name} price`}
+                      className="h-9 w-20 rounded border-[1.5px] border-line bg-surface px-2 font-mono text-sm text-ink"
+                      value={s.price}
+                      onChange={(e) => setSvc(d.id, { price: e.target.value })}
+                    />
+                    {(d.unitSize ?? 1) > 1 ? `per ${d.unitSize} ${UNIT_EN[d.unit!]}` : `per ${UNIT_EN[d.unit!].replace(/s$/, '')}`}
+                  </label>
+                )}
+                {d.form === 'document' && <span className="text-xs text-ink-muted">print rates + binding</span>}
+                {d.form === 'custom' && <span className="text-xs text-ink-muted">you price each one</span>}
+                <select aria-label={`${d.name} days needed`} className="h-9 rounded border-[1.5px] border-line bg-surface px-2 text-sm" value={s.lead} onChange={(e) => setSvc(d.id, { lead: e.target.value })}>
+                  {[...new Set([...DAY_CHOICES, Number(s.lead)])].sort((x, y) => x - y).map((n) => (
+                    <option key={n} value={n}>
+                      {n === 0 ? 'Same day' : `${n} day${n === 1 ? '' : 's'}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Hard binding (₹/copy)" hint="Black, gold letters">
+            <input inputMode="decimal" className={`${input} font-mono`} value={f.hard} onChange={set('hard')} />
+          </Field>
+          <Field label="Spiral (₹/copy)">
+            <input inputMode="decimal" className={`${input} font-mono`} value={f.spiral} onChange={set('spiral')} />
+          </Field>
+          <Field label="Soft cover (₹/copy)">
+            <input inputMode="decimal" className={`${input} font-mono`} value={f.soft} onChange={set('soft')} />
+          </Field>
+        </div>
+        <Field label="Advance asked (%)" hint="Suggested on each quote; you can change it per order">
+          <input inputMode="numeric" className={`${input} font-mono`} value={f.advance} onChange={set('advance')} />
+        </Field>
+        <p className="text-xs text-ink-muted">
+          Printing is priced from your rates above. Days needed: customers can’t pick an earlier date. Files are kept until printing is done (at most 7 days) — customers agree to this when they send.
+        </p>
+        {msg && <Banner tone={msg.tone}>{msg.text}</Banner>}
+        <Button type="submit" variant="secondary" className="w-full" disabled={busy}>
+          {busy ? 'Saving…' : 'Save order settings'}
+        </Button>
+      </Card>
+    </form>
   )
 }

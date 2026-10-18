@@ -74,6 +74,19 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET "+p+"/jobs/{id}/events", s.jobEvents)
 	mux.HandleFunc("POST "+p+"/jobs/{id}/live", s.guest(s.jobLive))
 
+	// Multi-day orders (blackbooks), customer side.
+	mux.HandleFunc("POST "+p+"/shops/{slug}/orders", s.createOrder)
+	mux.HandleFunc("GET "+p+"/orders/{id}", s.guestOrder(s.getOrder))
+	mux.HandleFunc("POST "+p+"/orders/{id}/files", s.guestOrder(s.addOrderFiles))
+	mux.HandleFunc("POST "+p+"/orders/{id}/files/{fileId}/complete", s.guestOrder(s.completeOrderFile))
+	mux.HandleFunc("POST "+p+"/orders/{id}/submit", s.guestOrder(s.guestOrderStep(s.submitOrder)))
+	mux.HandleFunc("PUT "+p+"/orders/{id}/cover", s.guestOrder(s.guestOrderStep(s.customerOrderCover)))
+	mux.HandleFunc("POST "+p+"/orders/{id}/approve-cover", s.guestOrder(s.guestOrderStep(s.approveOrderCover)))
+	mux.HandleFunc("POST "+p+"/orders/{id}/cancel", s.guestOrder(s.guestOrderStep(s.cancelOrder)))
+	mux.HandleFunc("POST "+p+"/orders/{id}/delete-files", s.guestOrder(s.guestOrderStep(s.deleteOrderFiles)))
+	mux.HandleFunc("GET "+p+"/orders/{id}/events", s.orderEvents)
+	mux.HandleFunc("POST "+p+"/orders/{id}/live", s.guestOrder(s.orderLive))
+
 	// Shop routes.
 	mux.HandleFunc("GET "+p+"/shop/staff-names", s.staffNames)
 	mux.HandleFunc("POST "+p+"/shop/login", s.login)
@@ -102,6 +115,12 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.HandleFunc("GET "+p+"/shop/deletion-health", s.owner(s.deletionHealth))
 	mux.HandleFunc("GET "+p+"/shop/dashboard", s.owner(s.dashboard))
+	mux.HandleFunc("GET "+p+"/shop/orders", s.staff(s.shopOrders))
+	mux.HandleFunc("POST "+p+"/shop/orders", s.staff(s.createShopOrder))
+	mux.HandleFunc("GET "+p+"/shop/orders/{id}", s.staff(s.shopOrder))
+	mux.HandleFunc("POST "+p+"/shop/orders/{id}/{action}", s.staff(s.shopOrderAction))
+	mux.HandleFunc("GET "+p+"/shop/orders/{id}/files/{fileId}/url", s.staff(s.orderFileURL))
+	mux.HandleFunc("PUT "+p+"/shop/order-settings", s.owner(s.putOrderSettings))
 
 	if s.Local != nil {
 		mux.Handle(p+"/files/", s.Local.Handler())

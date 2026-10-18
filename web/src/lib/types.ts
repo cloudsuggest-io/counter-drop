@@ -95,6 +95,27 @@ export interface PublicShop {
   colourAvailable: boolean
   wait: Wait
   holdDays: number
+  orders: PublicOrderSettings
+}
+
+export interface PublicOrderSettings {
+  enabled: boolean
+  hardPaise: number
+  spiralPaise: number
+  softPaise: number
+  advancePercent: number
+  /** Files of an order are kept at most this many days. */
+  fileDays: number
+  /** Only the services the shop takes online. */
+  services: ServiceSetting[]
+}
+
+/** One shop's setting for an order service (see lib/services.ts). */
+export interface ServiceSetting {
+  id: string
+  enabled: boolean
+  unitPaise?: number
+  leadDays: number
 }
 
 export interface QuoteLine {
@@ -161,6 +182,7 @@ export interface Shop {
   prices: PriceList
   lanes: Lane[]
   holdDays: number
+  orders: OrderSettings
 }
 
 export interface Staff {
@@ -211,7 +233,7 @@ export interface Dashboard {
   from: string
   to: string
   serverTime: string
-  earnings: { totalPaise: number; cashPaise: number; upiPaise: number; unrecordedPaise: number; unrecordedJobs: number }
+  earnings: { totalPaise: number; cashPaise: number; upiPaise: number; unrecordedPaise: number; unrecordedJobs: number; ordersPaise: number }
   previous: { paise: number; jobs: number; label: string }
   jobs: { submitted: number; collected: number; cancelled: number; files: number; avgBillPaise: number; maxBillPaise: number }
   pages: {
@@ -234,4 +256,138 @@ export interface Dashboard {
   now: { inLine: number; printing: number; ready: number; oldestReadyToken?: string; oldestReadyMin: number; copiesToConfirm: number; pagesToConfirm: number }
   problems: { cancelledByCustomer: number; cancelledByShop: number; notCollected: number; noReceipt: number; longWaits: number }
   filesDeleted: number
+  orders: {
+    advancePaise: number
+    balancePaise: number
+    refundPaise: number
+    open: number
+    needQuote: number
+    dueToday: number
+    overdue: number
+    ready: number
+    pendingPaise: number
+  }
+}
+
+// --- Multi-day orders (blackbooks, binding, cards…). Mirrors domain.Order. --------------------------
+
+export type OrderState = 'draft' | 'requested' | 'quoted' | 'confirmed' | 'printing' | 'binding' | 'ready' | 'delivered' | 'cancelled'
+export type Binding = 'hard' | 'spiral' | 'soft' | 'none'
+
+export interface OrderSettings {
+  enabled: boolean
+  hardPaise: number
+  spiralPaise: number
+  softPaise: number
+  advancePercent: number
+  services: ServiceSetting[]
+}
+
+export interface CoverText {
+  title: string
+  student: string
+  rollNo?: string
+  course?: string
+  college: string
+  guide?: string
+  year?: string
+  spine?: string
+  extra?: string
+  /** The words to print (cards, stamps, banners). */
+  text?: string
+}
+
+export interface OrderSpec {
+  copies?: number
+  binding?: Binding
+  bothSides?: boolean
+  colourPages?: string
+  pages?: number
+  quantity?: number
+  size?: string
+  description?: string
+  notes?: string
+}
+
+export interface OrderLine {
+  label: string
+  paise: number
+}
+
+export interface OrderPayment {
+  id: string
+  kind: 'advance' | 'balance' | 'refund'
+  method: 'cash' | 'upi'
+  paise: number
+  at: string
+  by: string
+}
+
+export interface OrderEvent {
+  at: string
+  action: string
+  by?: string
+  note?: string
+}
+
+export interface Order {
+  id: string
+  shopId: string
+  code: string
+  /** Service ID (lib/services.ts). */
+  kind: string
+  state: OrderState
+  channel: 'online' | 'counter'
+  customerName?: string
+  phone?: string
+  spec: OrderSpec
+  cover: CoverText
+  dueDate: string
+  lines: OrderLine[]
+  totalPaise: number
+  advancePaise: number
+  paidPaise: number
+  payments: OrderPayment[]
+  coverVersion: number
+  coverApprovedAt?: string
+  files: JobFile[]
+  history: OrderEvent[]
+  cancelReason?: string
+  createdAt: string
+  updatedAt: string
+  submittedAt?: string
+  quotedAt?: string
+  confirmedAt?: string
+  readyAt?: string
+  deliveredAt?: string
+  cancelledAt?: string
+  filesDeletedAt?: string
+  copiesDeletedAt?: string
+  copiesDeletedBy?: string
+}
+
+/** GET /orders/{id} (customer). */
+export interface OrderView {
+  order: Order
+  balancePaise: number
+  shop: PublicShop
+  serverTime: string
+}
+
+/** GET /shop/orders/{id}. secret is only present right after creating the order or a new link. */
+export interface ShopOrderView {
+  order: Order
+  balancePaise: number
+  suggested: OrderLine[]
+  settings: OrderSettings
+  service: { id: string; name: string; form: string; proof?: string; unit?: string; unitSize?: number }
+  secret?: string
+  serverTime: string
+}
+
+export interface OrdersSnapshot {
+  open: Order[]
+  recent: Order[]
+  settings: OrderSettings
+  serverTime: string
 }

@@ -13,6 +13,10 @@ import QrPage from '@/shop/QrPage'
 import SetupPage from '@/shop/SetupPage'
 import AccountPage from '@/shop/AccountPage'
 import DashboardPage from '@/shop/DashboardPage'
+import OrdersPage from '@/shop/OrdersPage'
+import BlackbookPage from '@/customer/BlackbookPage'
+import OrderRequestPage from '@/customer/OrderRequestPage'
+import OrderPage from '@/customer/OrderPage'
 
 // Customer routes (/, /s/:slug, /t/:jobId) and /shop/login, /shop/setup are public; other /shop/* need a staff session.
 export default function App() {
@@ -24,6 +28,10 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/s/:slug" element={<DropPage />} />
             <Route path="/t/:jobId" element={<TicketPage />} />
+            <Route path="/s/:slug/blackbook" element={<BlackbookPage />} />
+            <Route path="/s/:slug/order" element={<OrderRequestPage />} />
+            <Route path="/s/:slug/order/:service" element={<OrderRequestPage />} />
+            <Route path="/o/:orderId" element={<OrderPage />} />
             <Route path="/scan" element={<ScanPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/terms" element={<TermsPage />} />
@@ -34,6 +42,7 @@ export default function App() {
             <Route path="/shop/qr" element={<RequireStaff><QrPage /></RequireStaff>} />
             <Route path="/shop/settings" element={<RequireStaff owner><SettingsPage /></RequireStaff>} />
             <Route path="/shop/dashboard" element={<RequireStaff owner><DashboardPage /></RequireStaff>} />
+            <Route path="/shop/orders" element={<RequireStaff><OrdersPage /></RequireStaff>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </ShopAuthProvider>

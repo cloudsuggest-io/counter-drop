@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BarChart3, Check, Download, ExternalLink, FileCheck2, FilePlus2, LogOut, ReceiptText, Moon, Play, Printer, QrCode, RotateCcw, Search, Settings, Sun, Undo2, UserRound, Volume2, VolumeX, X, Zap } from 'lucide-react'
+import { BarChart3, BookOpen, Check, Download, ExternalLink, FileCheck2, FilePlus2, LogOut, ReceiptText, Moon, Play, Printer, QrCode, RotateCcw, Search, Settings, Sun, Undo2, UserRound, Volume2, VolumeX, X, Zap } from 'lucide-react'
 import { ApiError } from '@/lib/api'
 import { chime, useLive, type LiveTicket } from '@/lib/live'
 import { clock, dayTime, minutesSince, mmss, rupees } from '@/lib/format'
@@ -308,6 +308,10 @@ export default function BoardPage() {
             <IconBtn label={dark ? 'Light theme' : 'Dark theme'} onClick={() => setDark(!dark)}>
               {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </IconBtn>
+            <Link to="/shop/orders" className="flex items-center gap-1.5 rounded px-2 py-2 text-sm font-semibold hover:bg-surface-tint" title="Orders — blackbooks, binding, cards…">
+              <BookOpen className="h-5 w-5" aria-hidden /> <span className="hidden md:inline">Orders</span>
+              <span className="sr-only md:hidden">Orders</span>
+            </Link>
             <Link to="/shop/qr" className="rounded p-2 hover:bg-surface-tint" aria-label="QR poster" title="QR poster">
               <QrCode className="h-5 w-5" />
             </Link>

@@ -804,6 +804,62 @@ paths:
                       data: { type: object, description: "See store.Dashboard" }
         "403": { $ref: "#/components/responses/Error" }
 
+  # --- Orders that take days (blackbooks, thesis, binding, bulk printing, cards, banners…) ----------
+  # Services come from a fixed catalogue (api/internal/domain/services.go); each shop switches them
+  # on, prices them and sets days needed (PUT /shop/order-settings). Money is only recorded here —
+  # it changes hands at the counter. Files: kept at most 7 days after sending, deleted 1 day after
+  # printing is done (binding/ready) and at once on delivery or cancel; the customer may delete them
+  # only until the shop confirms the order. Shapes: domain.Order, store.OrdersSnapshot.
+  /api/v1/cd/shops/{slug}/orders:
+    post:
+      tags: [Orders]
+      summary: Customer starts an order (draft until files are uploaded and it is submitted)
+      description: "Body: service, customerName, phone?, dueDate (YYYY-MM-DD, ≥ today + service days), consent (true), spec, cover (cover text or {text}), files[]. Returns {view, secret, uploads[]}."
+      responses:
+        "201": { description: Draft order with upload targets }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/cd/orders/{id}:
+    get:
+      tags: [Orders]
+      summary: Customer's order view (X-Ticket-Secret)
+      responses:
+        "200": { description: "{order, balancePaise, shop, serverTime}" }
+  /api/v1/cd/orders/{id}/files:
+    post: { tags: [Orders], summary: Add files to an open order (returns upload targets), responses: { "200": { description: OK } } }
+  /api/v1/cd/orders/{id}/files/{fileId}/complete:
+    post: { tags: [Orders], summary: Confirm an upload (pages counted on the phone), responses: { "200": { description: OK } } }
+  /api/v1/cd/orders/{id}/submit:
+    post: { tags: [Orders], summary: Send the draft to the shop (document services need a file), responses: { "200": { description: OK } } }
+  /api/v1/cd/orders/{id}/cover:
+    put: { tags: [Orders], summary: Customer edits the proof (cover text or text to print) until work passes the proof stage, responses: { "200": { description: OK }, "409": { $ref: "#/components/responses/Error" } } }
+  /api/v1/cd/orders/{id}/approve-cover:
+    post: { tags: [Orders], summary: "Customer approves a proof version ({version}); work can't pass the service's proof stage without it", responses: { "200": { description: OK } } }
+  /api/v1/cd/orders/{id}/cancel:
+    post: { tags: [Orders], summary: Customer cancels before any money is paid, responses: { "200": { description: OK }, "409": { $ref: "#/components/responses/Error" } } }
+  /api/v1/cd/orders/{id}/delete-files:
+    post: { tags: [Orders], summary: Customer deletes their files now — only before the shop confirms the order (409 after), responses: { "200": { description: OK }, "409": { $ref: "#/components/responses/Error" } } }
+  /api/v1/cd/orders/{id}/live:
+    post: { tags: [Orders], summary: Live-update ticket for the order page, responses: { "200": { description: OK } } }
+  /api/v1/cd/shop/orders:
+    get: { tags: [Orders], summary: "Shop's orders: open (by due date) and closed in the last 30 days", security: [ { BearerAuth: [] } ], responses: { "200": { description: store.OrdersSnapshot } } }
+    post: { tags: [Orders], summary: "Staff take an order at the counter (may include lines + advancePaise); returns the customer link secret", security: [ { BearerAuth: [] } ], responses: { "201": { description: shopOrderView } } }
+  /api/v1/cd/shop/orders/{id}:
+    get: { tags: [Orders], summary: "Order for staff, with suggested price lines and the service", security: [ { BearerAuth: [] } ], responses: { "200": { description: shopOrderView } } }
+  /api/v1/cd/shop/orders/{id}/{action}:
+    post:
+      tags: [Orders]
+      summary: "Staff action: quote | pay | confirm | stage | deliver | cancel | cover | details | copies-deleted | link"
+      description: "quote {lines, advancePaise}; pay {kind: advance|balance, method: cash|upi, paise}; stage {stage: printing|binding|ready} (422 cover_required before approval); deliver {method} (422 balance_due); cancel {reason, method? = refund}; link → new customer secret."
+      security: [ { BearerAuth: [] } ]
+      responses:
+        "200": { description: shopOrderView }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /api/v1/cd/shop/orders/{id}/files/{fileId}/url:
+    get: { tags: [Orders], summary: Download an order file (always a recorded download), security: [ { BearerAuth: [] } ], responses: { "200": { description: "{url}" } } }
+  /api/v1/cd/shop/order-settings:
+    put: { tags: [Orders], summary: "Owner: online on/off, binding prices, advance %, services[] {id, enabled, unitPaise, leadDays}", security: [ { BearerAuth: [] } ], responses: { "200": { description: domain.OrderSettings }, "403": { $ref: "#/components/responses/Error" } } }
+
 components:
   securitySchemes:
     BearerAuth:

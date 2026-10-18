@@ -18,6 +18,7 @@ func (s *Store) Dashboard(ctx context.Context, shopID string, days int) (store.D
 	dayList := store.DashboardDays(sh, now, days)
 
 	perDay := make([][]jobRec, len(dayList))
+	payDay := make([][]store.OrderPaymentRow, len(dayList))
 	errs := make([]error, len(dayList))
 	sem := make(chan struct{}, 8)
 	var wg sync.WaitGroup
@@ -27,19 +28,28 @@ func (s *Store) Dashboard(ctx context.Context, shopID string, days int) (store.D
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			perDay[i], errs[i] = s.dayJobs(ctx, shopID, d)
+			if perDay[i], errs[i] = s.dayJobs(ctx, shopID, d); errs[i] == nil {
+				payDay[i], errs[i] = s.orderPayments(ctx, shopID, d)
+			}
 		}()
 	}
 	open, openErr := s.openJobs(ctx, shopID)
 	copies, copiesErr := s.copiesToDelete(ctx, shopID, now)
+	orders, ordErr := s.openOrders(ctx, shopID)
 	wg.Wait()
-	for _, e := range append(errs, openErr, copiesErr) {
+	for _, e := range append(errs, openErr, copiesErr, ordErr) {
 		if e != nil {
 			return store.Dashboard{}, e
 		}
 	}
 
 	in := store.DashboardInput{Shop: sh, Now: now, Days: days, CopiesToConfirm: len(copies)}
+	for _, p := range payDay {
+		in.Payments = append(in.Payments, p...)
+	}
+	for i := range orders {
+		in.OpenOrders = append(in.OpenOrders, orders[i].domainOrder())
+	}
 	for _, list := range perDay {
 		for i := range list {
 			in.Jobs = append(in.Jobs, list[i].domainJob())

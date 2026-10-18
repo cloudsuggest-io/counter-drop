@@ -99,3 +99,36 @@ func TestBuildDashboard(t *testing.T) {
 }
 
 const docxMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+func TestDashboardOrders(t *testing.T) {
+	sh := domain.Shop{Timezone: "Asia/Kolkata"}
+	loc := sh.Location()
+	now := time.Date(2026, 10, 18, 18, 0, 0, 0, loc)
+	pay := func(daysAgo int, kind, method string, paise int64) OrderPaymentRow {
+		return OrderPaymentRow{Kind: kind, Method: method, Paise: paise, At: time.Date(2026, 10, 18-daysAgo, 12, 0, 0, 0, loc), By: "Imran"}
+	}
+	open := []domain.Order{
+		{State: domain.OrderRequested, DueDate: "2026-10-18"},
+		{State: domain.OrderConfirmed, DueDate: "2026-10-18", TotalPaise: 100000, PaidPaise: 50000},
+		{State: domain.OrderBinding, DueDate: "2026-10-16", TotalPaise: 60000, PaidPaise: 30000},
+		{State: domain.OrderReady, DueDate: "2026-10-15", TotalPaise: 40000, PaidPaise: 40000},
+		{State: domain.OrderDraft, DueDate: "2026-10-18"},
+	}
+	d := BuildDashboard(DashboardInput{Shop: sh, Now: now, Days: 1, OpenOrders: open, Payments: []OrderPaymentRow{
+		pay(0, domain.PayAdvance, "cash", 50000), pay(0, domain.PayBalance, "upi", 20000), pay(0, domain.PayRefund, "cash", -5000), pay(3, domain.PayAdvance, "cash", 9999),
+	}})
+	if d.Earnings.TotalPaise != 65000 || d.Earnings.CashPaise != 45000 || d.Earnings.UPIPaise != 20000 || d.Earnings.OrdersPaise != 65000 {
+		t.Fatalf("earnings %+v", d.Earnings)
+	}
+	o := d.Orders
+	if o.AdvancePaise != 50000 || o.BalancePaise != 20000 || o.RefundPaise != 5000 {
+		t.Fatalf("money %+v", o)
+	}
+	// Ready orders aren't overdue (only waiting for pickup); drafts aren't counted.
+	if o.Open != 4 || o.NeedQuote != 1 || o.DueToday != 2 || o.Overdue != 1 || o.Ready != 1 || o.PendingPaise != 80000 {
+		t.Fatalf("book %+v", o)
+	}
+	if d.Series[3].Paise != 9999 || d.Staff[0].CashPaise != 45000 {
+		t.Fatalf("series/staff %+v %+v", d.Series[3], d.Staff)
+	}
+}

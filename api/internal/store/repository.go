@@ -68,6 +68,23 @@ type Repository interface {
 	// Dashboard summarises the shop's last `days` days (1, 7 or 30) for the owner.
 	Dashboard(ctx context.Context, shopID string, days int) (Dashboard, error)
 
+	// Multi-day orders (blackbooks)
+	CreateOrder(ctx context.Context, sh domain.Shop, in CreateOrderInput, lim Limits) (domain.Order, string, error)
+	GetOrder(ctx context.Context, id string) (domain.Order, error)
+	VerifyOrderSecret(ctx context.Context, id, secret string) error
+	AddOrderFiles(ctx context.Context, id string, files []NewFile, lim Limits) (domain.Order, error)
+	OrderFileUploaded(ctx context.Context, id, fileID string, pages int) (domain.Order, error)
+	SubmitOrder(ctx context.Context, id string) (domain.Order, error)
+	CustomerOrderCover(ctx context.Context, id string, cover domain.CoverText) (domain.Order, error)
+	ApproveOrderCover(ctx context.Context, id string, version int) (domain.Order, error)
+	CustomerCancelOrder(ctx context.Context, id string) (domain.Order, error)
+	DeleteOrderFiles(ctx context.Context, id string) (domain.Order, error)
+	ShopOrders(ctx context.Context, shopID string) (OrdersSnapshot, error)
+	OrderForShop(ctx context.Context, shopID, id string) (domain.Order, error)
+	OrderAct(ctx context.Context, id string, in OrderActInput) (domain.Order, string, error)
+	RecordOrderFileAccess(ctx context.Context, shopID, id, fileID, staffName string) (domain.Order, domain.JobFile, error)
+	UpdateOrderSettings(ctx context.Context, shopID string, os domain.OrderSettings) (domain.Shop, error)
+
 	// Retention (background worker)
 	ClaimDueFiles(ctx context.Context, limit int) ([]DueFile, error)
 	MarkFileDeleted(ctx context.Context, f DueFile) (shopID string, jobDone bool, err error)

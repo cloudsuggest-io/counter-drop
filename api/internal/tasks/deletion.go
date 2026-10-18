@@ -108,6 +108,12 @@ func (d *Deleter) RunOnce(ctx context.Context) error {
 			d.Logger.Error("mark file deleted", "file_id", f.ID, "error", err)
 			continue
 		}
+		if done && f.OrderID != "" {
+			d.Logger.Info("order files deleted", "order_id", f.OrderID, "shop_id", shopID)
+			d.publish(realtime.OrderTopic(f.OrderID), realtime.Event{Type: "order.updated", Data: map[string]string{"id": f.OrderID}})
+			d.publish(realtime.ShopTopic(shopID), realtime.Event{Type: "orders.changed", Data: map[string]string{"orderId": f.OrderID}})
+			continue
+		}
 		if done {
 			d.Logger.Info("job files deleted", "job_id", f.JobID, "shop_id", shopID)
 			if j, err := d.Store.GetJob(ctx, f.JobID); err == nil {

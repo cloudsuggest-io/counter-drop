@@ -114,6 +114,8 @@ export class CounterDropStack extends Stack {
       }],
       lifecycleRules: [
         { id: 'deletion-backstop', prefix: 'cd/', expiration: Duration.days(8) },
+        // Order files (blackbooks, cards…) are kept at most 7 days; the app deletes them sooner, this is the backstop.
+        { id: 'order-deletion-backstop', prefix: 'ord/', expiration: Duration.days(8) },
         { id: 'abort-multipart', abortIncompleteMultipartUploadAfter: Duration.days(1) },
       ],
       removalPolicy: RemovalPolicy.RETAIN_ON_UPDATE_OR_DELETE,

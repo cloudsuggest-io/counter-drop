@@ -41,6 +41,17 @@ func FileKey(shopID, jobID, fileID string) (string, error) {
 	return fmt.Sprintf("cd/%s/%s/%s", shopID, jobID, fileID), nil
 }
 
+// OrderFileKey builds "ord/{shop}/{order}/{file}" for files of multi-day orders (blackbooks). They are
+// kept up to 30 days, so they live under their own prefix with a longer lifecycle backstop.
+func OrderFileKey(shopID, orderID, fileID string) (string, error) {
+	for _, id := range []string{shopID, orderID, fileID} {
+		if !idPattern.MatchString(id) {
+			return "", fmt.Errorf("invalid id in object key: %q", id)
+		}
+	}
+	return fmt.Sprintf("ord/%s/%s/%s", shopID, orderID, fileID), nil
+}
+
 type Durations struct {
 	PutTTL time.Duration
 	GetTTL time.Duration

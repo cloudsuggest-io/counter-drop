@@ -133,9 +133,10 @@ type SetupInfo struct {
 }
 
 type DueFile struct {
-	ID    string
-	JobID string
-	Key   string
+	ID      string
+	JobID   string
+	OrderID string // set instead of JobID for files of multi-day orders
+	Key     string
 }
 
 type DeletionHealth struct {
@@ -143,4 +144,59 @@ type DeletionHealth struct {
 	Deleted24h      int        `json:"deleted24h"`
 	Failed          int        `json:"failed"`
 	OldestUndeleted *time.Time `json:"oldestUndeleted,omitempty"`
+}
+
+// --- multi-day orders (blackbooks) ---------------------------------------------------------------
+
+type CreateOrderInput struct {
+	Service  string // catalogue service ID (domain.Catalogue)
+	Customer string
+	Phone    string
+	Spec     domain.OrderSpec
+	Cover    domain.CoverText
+	DueDate  string
+	Files    []NewFile
+	// Staff creating the order at the counter (empty for a customer sending it online).
+	Staff string
+	// Counter orders can be quoted straight away.
+	Lines        []domain.OrderLine
+	AdvancePaise int64
+}
+
+// OrderActInput is a staff action on an order (POST /shop/orders/{id}/{action}).
+type OrderActInput struct {
+	Action string // quote | pay | confirm | stage | deliver | cancel | cover | details | copies-deleted | link
+	Staff  string
+	ShopID string
+
+	Lines        []domain.OrderLine // quote
+	AdvancePaise int64              // quote
+	PayKind      string             // pay: advance | balance
+	Method       string             // pay, deliver: cash | upi; cancel: refund method ("" = keep the advance)
+	Paise        int64              // pay
+	Stage        domain.OrderState  // stage
+	Reason       string             // cancel
+	Cover        *domain.CoverText  // cover
+	Spec         *domain.OrderSpec  // details
+	DueDate      string             // details
+	Customer     *string            // details
+	Phone        *string            // details
+}
+
+// OrdersSnapshot is the shop's Orders screen.
+type OrdersSnapshot struct {
+	Open       []domain.Order       `json:"open"`
+	Recent     []domain.Order       `json:"recent"` // delivered or cancelled in the last 30 days
+	Settings   domain.OrderSettings `json:"settings"`
+	ServerTime time.Time            `json:"serverTime"`
+}
+
+// OrderPaymentRow is one payment for the dashboard.
+type OrderPaymentRow struct {
+	OrderID string
+	Kind    string
+	Method  string
+	Paise   int64
+	At      time.Time
+	By      string
 }
