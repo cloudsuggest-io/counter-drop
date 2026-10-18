@@ -7,6 +7,7 @@ import { bytes, rupees } from '@/lib/format'
 import { checkPdf } from '@/lib/pdf'
 import { uploadFile, mimeOf, fileKind, ACCEPTED, ALLOWED_MIMES } from '@/lib/upload'
 import { addDays, saveOrder, todayIST } from '@/lib/orders'
+import { clearOrderDraft, loadOrderDraft, saveOrderDraft } from '@/lib/orderDraft'
 import { quantityEstimate, serviceOf, SERVICES, type ServiceDef } from '@/lib/services'
 import type { Binding, CoverText, OrderSpec, OrderView, PublicShop, ServiceSetting, UploadTarget } from '@/lib/types'
 import { Banner, Button, Card, Segmented, Spinner, Stepper } from '@/components/ui'
@@ -24,12 +25,30 @@ interface PickedFile {
   status: 'ready' | 'uploading' | 'waiting' | 'done' | 'error'
 }
 
+interface StoredOrderDraft {
+  files: { id: string; file: File; pages: number }[]
+  copies: number
+  binding: Binding
+  colourPages: string
+  pages: string
+  quantity: string
+  size: string
+  description: string
+  cover: CoverText
+  text: string
+  notes: string
+  due: string
+  name: string
+  phone: string
+  consent: boolean
+}
+
 const input = 'mt-1 h-12 w-full rounded border-[1.5px] border-line bg-surface px-3 text-base focus:border-action focus:outline-none'
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({ label, hint, required = false, children }: { label: string; hint?: string; required?: boolean; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="text-sm font-semibold">{label}</span>
+      <span className="text-sm font-semibold">{label}{required && <span className="ml-1 text-danger" aria-hidden="true">*</span>}</span>
       {children}
       {hint && <span className="mt-1 block text-xs text-ink-muted">{hint}</span>}
     </label>
@@ -124,7 +143,10 @@ function OrderForm({ shop, svc, setting }: { shop: PublicShop; svc: ServiceDef; 
   const [consent, setConsent] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
+  const [restored, setRestored] = useState(false)
   const pick = useRef<HTMLInputElement>(null)
+  const submitted = useRef(false)
+  const draftKey = `${slug}/${svc.id}`
 
   const os = shop.orders
   const isDoc = svc.form === 'document'
@@ -135,7 +157,56 @@ function OrderForm({ shop, svc, setting }: { shop: PublicShop; svc: ServiceDef; 
   const unitName = svc.unit ? t(`unit_${svc.unit}` as Key) : ''
   const qty = Number(quantity) || 0
   const estimate = svc.form === 'quantity' ? quantityEstimate(svc, setting, qty) : 0
+  const normalizedPhone = phone.trim().replace(/[\s-]/g, '').replace('+91', '')
+  const phoneValid = !normalizedPhone || /^[6-9]\d{9}$/.test(normalizedPhone)
+  const formValid =
+    name.trim().length > 0 && name.trim().length <= 40 &&
+    (!isDoc || files.length > 0) &&
+    (!isDoc || ((Number(pages) || 0) >= 0 && (Number(pages) || 0) <= 2000)) &&
+    (svc.form !== 'quantity' || (qty >= 1 && qty <= 100000)) &&
+    (svc.form !== 'custom' || (description.trim().length >= 3 && description.trim().length <= 500)) &&
+    (svc.proof !== 'cover' || (!!cover.title.trim() && !!cover.student.trim() && !!cover.college.trim() && [cover.title, cover.student, cover.rollNo, cover.course, cover.college, cover.guide, cover.year, cover.spine, cover.extra].every((v) => (v ?? '').length <= 200))) &&
+    (svc.proof !== 'text' || (!!text.trim() && text.length <= 1000)) &&
+    phoneValid && consent && due >= minDue
   const setC = (k: keyof CoverText) => (e: React.ChangeEvent<HTMLInputElement>) => setCover((c) => ({ ...c, [k]: e.target.value }))
+
+  useEffect(() => {
+    let active = true
+    loadOrderDraft<StoredOrderDraft>(draftKey)
+      .then((draft) => {
+        if (!active || !draft) return
+        setFiles(draft.files.map((f) => ({ id: f.id, file: f.file, mime: mimeOf(f.file), pages: f.pages, progress: 0, status: 'ready' })))
+        setCopies(draft.copies)
+        setBinding(draft.binding)
+        setColourPages(draft.colourPages)
+        setPages(draft.pages)
+        setQuantity(draft.quantity)
+        setSize(draft.size)
+        setDescription(draft.description)
+        setCover(draft.cover)
+        setText(draft.text)
+        setNotes(draft.notes)
+        setDue(draft.due < minDue ? minDue : draft.due)
+        setName(draft.name)
+        setPhone(draft.phone)
+        setConsent(draft.consent)
+      })
+      .catch(() => undefined)
+      .finally(() => { if (active) setRestored(true) })
+    return () => { active = false }
+  }, [draftKey, minDue])
+
+  useEffect(() => {
+    if (!restored || submitted.current) return
+    const draft: StoredOrderDraft = {
+      files: files.map(({ id, file, pages }) => ({ id, file, pages })),
+      copies, binding, colourPages, pages, quantity, size, description, cover, text, notes, due, name, phone, consent,
+    }
+    const timeout = window.setTimeout(() => {
+      saveOrderDraft(draftKey, draft).catch(() => setError(t('draftSaveFailed')))
+    }, 250)
+    return () => window.clearTimeout(timeout)
+  }, [restored, draftKey, files, copies, binding, colourPages, pages, quantity, size, description, cover, text, notes, due, name, phone, consent, t])
 
   const patch = (id: string, p: Partial<PickedFile>) => setFiles((fs) => fs.map((f) => (f.id === id ? { ...f, ...p } : f)))
 
@@ -177,8 +248,22 @@ function OrderForm({ shop, svc, setting }: { shop: PublicShop; svc: ServiceDef; 
 
   const send = async () => {
     setError('')
+    const missing: string[] = []
+    if (!name.trim()) missing.push(t('bbName'))
     if (isDoc && files.length === 0) {
-      setError(t('bbNeedFile'))
+      missing.push(t('bbFile'))
+    }
+    if (svc.form === 'quantity' && qty < 1) missing.push(t('qtyLabel', { unit: unitName }))
+    if (svc.form === 'custom' && description.trim().length < 3) missing.push(t('descLabel'))
+    if (svc.proof === 'cover') {
+      if (!cover.title.trim()) missing.push(t('cTitle'))
+      if (!cover.student.trim()) missing.push(t('cStudent'))
+      if (!cover.college.trim()) missing.push(t('cCollege'))
+    }
+    if (svc.proof === 'text' && !text.trim()) missing.push(t('textLabel'))
+    if (!consent) missing.push(t('bbConsentShort'))
+    if (missing.length) {
+      setError(t('bbRequiredDetails', { fields: missing.join(', ') }))
       return
     }
     setSending(true)
@@ -211,6 +296,8 @@ function OrderForm({ shop, svc, setting }: { shop: PublicShop; svc: ServiceDef; 
       }
       await api(`/orders/${order.id}/submit`, { body: {}, secret: res.secret })
       saveOrder({ orderId: order.id, secret: res.secret, slug, shopName: shop.name, code: order.code, savedAt: Date.now() })
+      submitted.current = true
+      await clearOrderDraft(draftKey).catch(() => undefined)
       navigate(`/o/${order.id}`)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t('uploadFailed'))
@@ -222,7 +309,7 @@ function OrderForm({ shop, svc, setting }: { shop: PublicShop; svc: ServiceDef; 
 
   const fileCard = (
     <Card className="space-y-3 p-4">
-      <h2 className="font-semibold">{isDoc ? t('bbFile') : t('designFile')}</h2>
+      <h2 className="font-semibold">{isDoc ? t('bbFile') : t('designFile')}{isDoc && <span className="ml-1 text-danger" aria-hidden="true">*</span>}</h2>
       {files.map((f) => {
         const Icon = fileKind(f.mime) === 'document' ? FileType : FileText
         return (
@@ -264,6 +351,8 @@ function OrderForm({ shop, svc, setting }: { shop: PublicShop; svc: ServiceDef; 
     </Card>
   )
 
+  if (!restored) return <Shell shop={shop}><div className="flex justify-center py-16"><Spinner className="h-8 w-8" /></div></Shell>
+
   return (
     <Shell shop={shop} wide>
       <div className="flex items-start gap-3">
@@ -278,6 +367,7 @@ function OrderForm({ shop, svc, setting }: { shop: PublicShop; svc: ServiceDef; 
             </Link>
           </div>
           <p className="text-ink-muted">{t('bbIntro')}</p>
+          <p className="text-xs text-ink-muted"><span className="text-danger" aria-hidden="true">*</span> {t('requiredLegend')}</p>
         </div>
       </div>
       <input ref={pick} type="file" multiple accept={ACCEPTED} className="hidden" onChange={(e) => onPick(e.target.files).finally(() => (e.target.value = ''))} />
@@ -320,6 +410,7 @@ function OrderForm({ shop, svc, setting }: { shop: PublicShop; svc: ServiceDef; 
                 <div className="grid grid-cols-2 gap-3">
                   <Field
                     label={t('qtyLabel', { unit: unitName })}
+                    required
                     hint={
                       setting.unitPaise
                         ? (svc.unitSize ?? 1) > 1
@@ -338,7 +429,7 @@ function OrderForm({ shop, svc, setting }: { shop: PublicShop; svc: ServiceDef; 
               </>
             )}
             {svc.form === 'custom' && (
-              <Field label={t('descLabel')} hint={t('descHint')}>
+              <Field label={t('descLabel')} hint={t('descHint')} required>
                 <textarea className={`${input} h-28 py-2`} value={description} maxLength={500} onChange={(e) => setDescription(e.target.value)} />
               </Field>
             )}
@@ -357,11 +448,11 @@ function OrderForm({ shop, svc, setting }: { shop: PublicShop; svc: ServiceDef; 
                 <h2 className="font-semibold">{t('bbCover')}</h2>
                 <p className="text-xs text-ink-muted">{t('bbCoverHint')}</p>
               </div>
-              <Field label={t('cTitle')}>
+              <Field label={t('cTitle')} required>
                 <input className={input} value={cover.title} onChange={setC('title')} />
               </Field>
               <div className="grid grid-cols-2 gap-3">
-                <Field label={t('cStudent')}>
+                <Field label={t('cStudent')} required>
                   <input className={input} value={cover.student} onChange={setC('student')} />
                 </Field>
                 <Field label={t('cRoll')}>
@@ -374,7 +465,7 @@ function OrderForm({ shop, svc, setting }: { shop: PublicShop; svc: ServiceDef; 
                   <input className={input} value={cover.year ?? ''} onChange={setC('year')} placeholder="2026–27" />
                 </Field>
               </div>
-              <Field label={t('cCollege')}>
+              <Field label={t('cCollege')} required>
                 <input className={input} value={cover.college} onChange={setC('college')} />
               </Field>
               <div className="grid grid-cols-2 gap-3">
@@ -392,7 +483,7 @@ function OrderForm({ shop, svc, setting }: { shop: PublicShop; svc: ServiceDef; 
           )}
           {svc.proof === 'text' && (
             <Card className="space-y-2 p-4">
-              <Field label={t('textLabel')} hint={t('textHint')}>
+              <Field label={t('textLabel')} hint={t('textHint')} required>
                 <textarea className={`${input} h-32 py-2 font-mono text-sm`} value={text} maxLength={1000} onChange={(e) => setText(e.target.value)} placeholder={'Ravi Patil\nPatil Electricals\n98200 12345'} />
               </Field>
             </Card>
@@ -400,7 +491,7 @@ function OrderForm({ shop, svc, setting }: { shop: PublicShop; svc: ServiceDef; 
 
           <Card className="space-y-3 p-4">
             <div className="grid grid-cols-2 gap-3">
-              <Field label={t('bbName')}>
+              <Field label={t('bbName')} required>
                 <input className={input} value={name} maxLength={40} autoComplete="name" onChange={(e) => setName(e.target.value)} />
               </Field>
               <Field label={t('bbDue')} hint={setting.leadDays > 0 ? t('bbDueHint', { d: setting.leadDays }) : undefined}>
@@ -414,14 +505,14 @@ function OrderForm({ shop, svc, setting }: { shop: PublicShop; svc: ServiceDef; 
               <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--action)]" />
               <span className="flex gap-2">
                 <ShieldCheck className="h-5 w-5 shrink-0 text-ready" aria-hidden />
-                {t('bbConsent', { d: os.fileDays })}
+                <span>{t('bbConsent', { d: os.fileDays })}<span className="ml-1 text-danger" aria-hidden="true">*</span></span>
               </span>
             </label>
           </Card>
 
           {error && <Banner tone="danger">{error}</Banner>}
-          <div className="sticky bottom-0 -mx-4 border-t border-line bg-canvas px-4 py-3 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:p-0">
-            <Button size="lg" className="w-full" onClick={send} disabled={sending || !consent}>
+          <div className="pt-1">
+            <Button size="lg" className="w-full" onClick={send} disabled={sending || !formValid}>
               {sending ? <Spinner /> : null}
               {sending ? t('sending') : t('bbSend')}
             </Button>

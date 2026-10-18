@@ -32,6 +32,8 @@ import { useShopAuth, useShopTheme } from './auth'
 // delivery. English only.
 
 const input = 'mt-1 h-11 w-full rounded border-[1.5px] border-line bg-surface px-3 text-base focus:border-action focus:outline-none'
+// Same look without width/margin, for inputs sized by their row (quote lines, advance).
+const rowInput = 'h-11 rounded border-[1.5px] border-line bg-surface px-3 text-base focus:border-action focus:outline-none'
 const toRs = (p: number) => (p ? String(p / 100) : '')
 const toPaise = (v: string) => Math.round((Number(v.trim() || '0') || 0) * 100)
 
@@ -724,11 +726,16 @@ function QuoteEditor({ v, busy, onCancel, onSave }: { v: ShopOrderView; busy: bo
       <FormBox title="Price">
         {!v.order.spec.pages && <p className="text-sm text-attention">Pages unknown — open the file, count, and add a printing line (or set pages under “What to make” to get a suggestion).</p>}
         <div className="space-y-2">
+          <div className="grid grid-cols-[minmax(0,1fr)_7rem_2rem] gap-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            <span>Item</span>
+            <span className="text-right">₹</span>
+            <span />
+          </div>
           {rows.map((r, i) => (
-            <div key={i} className="flex gap-2">
-              <input className={`${input} mt-0 flex-1`} value={r.label} placeholder="e.g. Printing B/W · 80 pages × 3" onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} aria-label="Line" />
-              <input className={`${input} mt-0 w-28 text-right font-mono`} inputMode="decimal" value={r.rs} placeholder="₹" onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, rs: e.target.value.replace(/[^0-9.]/g, '') } : x)))} aria-label="Amount in rupees" />
-              <button type="button" className="p-2 text-ink-muted hover:text-danger" onClick={() => setRows(rows.filter((_, j) => j !== i))} aria-label="Remove line">
+            <div key={i} className="grid grid-cols-[minmax(0,1fr)_7rem_2rem] gap-2">
+              <input className={`${rowInput} w-full min-w-0`} value={r.label} placeholder="e.g. Printing B/W · 80 pages × 3" onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} aria-label="Line" />
+              <input className={`${rowInput} w-full min-w-0 text-right font-mono`} inputMode="decimal" value={r.rs} placeholder="₹" onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, rs: e.target.value.replace(/[^0-9.]/g, '') } : x)))} aria-label="Amount in rupees" />
+              <button type="button" className="w-8 p-2 text-ink-muted hover:text-danger" onClick={() => setRows(rows.filter((_, j) => j !== i))} aria-label="Remove line">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -744,7 +751,7 @@ function QuoteEditor({ v, busy, onCancel, onSave }: { v: ShopOrderView; busy: bo
         <label className="flex items-center justify-between gap-3 text-sm font-semibold">
           Advance to ask (₹)
           <input
-            className={`${input} mt-0 w-32 text-right font-mono`}
+            className={`${rowInput} w-32 shrink-0 text-right font-mono`}
             inputMode="decimal"
             value={touched ? advance : toRs(adv)}
             onChange={(e) => {

@@ -49,11 +49,11 @@ test('four arm64 Lambdas from one binary, each with its runtime role', () => {
   })
 })
 
-test('push only wakes for job and shop-profile changes', () => {
+test('push wakes for job, shop-profile, and order changes with one OR filter', () => {
   const t = synth()
   t.hasResourceProperties('AWS::Lambda::EventSourceMapping', {
     StartingPosition: 'LATEST', BisectBatchOnFunctionError: true,
-    FilterCriteria: { Filters: [{ Pattern: '{"dynamodb":{"Keys":{"SK":{"S":["JOB"]}}}}' }, { Pattern: '{"dynamodb":{"Keys":{"SK":{"S":["PROFILE"]}}}}' }] },
+    FilterCriteria: { Filters: [{ Pattern: '{"$or":[{"dynamodb":{"Keys":{"SK":{"S":["JOB"]}}}},{"dynamodb":{"Keys":{"SK":{"S":["PROFILE"]}}}},{"dynamodb":{"Keys":{"SK":{"S":["ORDER"]}}}}]}' }] },
   })
 })
 

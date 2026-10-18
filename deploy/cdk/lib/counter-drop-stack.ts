@@ -216,9 +216,11 @@ export class CounterDropStack extends Stack {
       maxBatchingWindow: Duration.seconds(0),
       retryAttempts: 2,
       bisectBatchOnError: true,
-      // Only jobs and shop profiles produce live updates; skip rate-limit counters, sessions, etc.
-      filters: [lambda.FilterCriteria.filter({ dynamodb: { Keys: { SK: { S: lambda.FilterRule.isEqual('JOB') } } } }),
-        lambda.FilterCriteria.filter({ dynamodb: { Keys: { SK: { S: lambda.FilterRule.isEqual('PROFILE') } } } })],
+      // Lambda ANDs multiple filter patterns, so keep these alternatives in one $or pattern.
+      // Orders must be included or newly submitted shop orders never reach the push Lambda.
+      filters: [lambda.FilterCriteria.filter({
+        $or: ['JOB', 'PROFILE', 'ORDER'].map((sk) => ({ dynamodb: { Keys: { SK: { S: [sk] } } } })),
+      })],
     }))
 
     // ── HTTP API (reached only through CloudFront: the Lambda checks X-Origin-Verify) ────────
