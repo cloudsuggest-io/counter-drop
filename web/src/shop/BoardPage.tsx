@@ -4,7 +4,7 @@ import { BarChart3, BookOpen, Check, Download, ExternalLink, FileCheck2, FilePlu
 import { ApiError } from '@/lib/api'
 import { chime, useLive, type LiveTicket } from '@/lib/live'
 import { clock, dayTime, minutesSince, mmss, rupees } from '@/lib/format'
-import type { Job, JobFile, JobState, OnlineState, PriceList, QueueSnapshot } from '@/lib/types'
+import type { Job, JobFile, JobState, OnlineState, OrdersSnapshot, PriceList, QueueSnapshot } from '@/lib/types'
 import { browserPrintable } from '@/lib/upload'
 import { Banner, Button, Chip, Logo, Spinner } from '@/components/ui'
 import { useShopAuth, useShopTheme } from './auth'
@@ -81,6 +81,7 @@ export default function BoardPage() {
   const { session, call, logout, setShop } = useShopAuth()
   const [dark, setDark] = useShopTheme()
   const [snap, setSnap] = useState<QueueSnapshot | null>(null)
+  const [ordersNeedingPrice, setOrdersNeedingPrice] = useState(0)
   const [lane, setLane] = useState<string>('')
   const [openId, setOpenId] = useState<string | null>(null)
   const [copiesOpen, setCopiesOpen] = useState(false)
@@ -113,9 +114,19 @@ export default function BoardPage() {
     }
   }, [call, setShop])
 
+  const loadOrderAlerts = useCallback(async () => {
+    try {
+      const orders = await call<OrdersSnapshot>('/shop/orders')
+      setOrdersNeedingPrice(orders.open.filter((o) => o.state === 'requested').length)
+    } catch {
+      // Keep the last known badge count if the request briefly fails.
+    }
+  }, [call])
+
   useEffect(() => {
     load()
-  }, [load])
+    loadOrderAlerts()
+  }, [load, loadOrderAlerts])
   const live = useMemo(
     () =>
       session
@@ -123,7 +134,14 @@ export default function BoardPage() {
         : null,
     [session, call],
   )
-  useLive(live, () => load(), load, 10000)
+  const resync = useCallback(() => {
+    load()
+    loadOrderAlerts()
+  }, [load, loadOrderAlerts])
+  useLive(live, (event) => {
+    load()
+    if (event.type === 'orders.changed') loadOrderAlerts()
+  }, resync, 10000)
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(id)
@@ -308,9 +326,15 @@ export default function BoardPage() {
             <IconBtn label={dark ? 'Light theme' : 'Dark theme'} onClick={() => setDark(!dark)}>
               {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </IconBtn>
-            <Link to="/shop/orders" className="flex items-center gap-1.5 rounded px-2 py-2 text-sm font-semibold hover:bg-surface-tint" title="Orders — blackbooks, binding, cards…">
+            <Link
+              to="/shop/orders"
+              aria-label={ordersNeedingPrice ? `Orders, ${ordersNeedingPrice} need a price` : 'Orders'}
+              className="flex items-center gap-1.5 rounded px-2 py-2 text-sm font-semibold hover:bg-surface-tint"
+              title={ordersNeedingPrice ? `${ordersNeedingPrice} orders need a price` : 'Orders — blackbooks, binding, cards…'}
+            >
               <BookOpen className="h-5 w-5" aria-hidden /> <span className="hidden md:inline">Orders</span>
               <span className="sr-only md:hidden">Orders</span>
+              {ordersNeedingPrice > 0 && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1 text-xs font-bold leading-none text-white">{ordersNeedingPrice > 99 ? '99+' : ordersNeedingPrice}</span>}
             </Link>
             <Link to="/shop/qr" className="rounded p-2 hover:bg-surface-tint" aria-label="QR poster" title="QR poster">
               <QrCode className="h-5 w-5" />

@@ -238,6 +238,19 @@ export default function DashboardPage() {
 
       <main className="mx-auto max-w-6xl space-y-3 p-4">
         {error && <Banner tone="danger">{error}</Banner>}
+        {(data?.orders.needQuote ?? 0) > 0 && (
+          <Link
+            to="/shop/orders"
+            className="flex items-center justify-between gap-3 rounded border-[1.5px] border-danger bg-danger-bg px-4 py-3 font-semibold text-danger hover:brightness-95"
+            aria-label={`${data!.orders.needQuote} orders need a price. Open orders.`}
+          >
+            <span className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-danger" aria-hidden />
+              {data!.orders.needQuote} {data!.orders.needQuote === 1 ? 'order needs' : 'orders need'} a price
+            </span>
+            <span className="shrink-0">Open orders →</span>
+          </Link>
+        )}
         {!data ? (
           <div className="flex justify-center py-24">{error ? null : <Spinner className="h-8 w-8" />}</div>
         ) : (
