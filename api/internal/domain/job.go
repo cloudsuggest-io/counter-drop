@@ -59,6 +59,8 @@ const (
 	PagesPending PagesStatus = "pending"
 	PagesCounted PagesStatus = "counted"
 	PagesUnknown PagesStatus = "unknown"
+	// PagesConfirmed: the phone couldn't count the pages (Word, Excel…); staff entered them.
+	PagesConfirmed PagesStatus = "confirmed"
 )
 
 var (
@@ -105,6 +107,7 @@ type Job struct {
 	PagesToConfirm bool       `json:"pagesToConfirm"`
 	ReadyBy        *time.Time `json:"readyBy,omitempty"`
 	ClaimedBy      string     `json:"claimedBy,omitempty"`
+	CollectedBy    string     `json:"collectedBy,omitempty"` // staff who marked it collected (took the payment)
 	CancelReason   string     `json:"cancelReason,omitempty"`
 	PaidMethod     string     `json:"paidMethod,omitempty"`
 	// OtherPrice is what the shop charged for Other files (set when marking ready); it is
@@ -259,6 +262,7 @@ func Transition(job *Job, action Action, actor Actor, reason string, now time.Ti
 		}
 		job.State = JobStateCollected
 		job.CollectedAt = &now
+		job.CollectedBy = actor.Name
 		at := now.Add(p.UndoWindow)
 		fx.ScheduleDelete = &at
 
@@ -271,6 +275,7 @@ func Transition(job *Job, action Action, actor Actor, reason string, now time.Ti
 		}
 		job.State = JobStateReady
 		job.CollectedAt = nil
+		job.CollectedBy = ""
 		fx.ClearDelete = true
 
 	case ActionCancel:

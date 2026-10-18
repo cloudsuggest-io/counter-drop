@@ -65,6 +65,8 @@ type Repository interface {
 	FileForShop(ctx context.Context, shopID, jobID, fileID string) (domain.JobFile, error)
 	RecordFileAccess(ctx context.Context, jobID, fileID, staffName string, download bool) (domain.Job, error)
 	MarkCopiesDeleted(ctx context.Context, shopID, jobID, staffName string) (domain.Job, error)
+	// Dashboard summarises the shop's last `days` days (1, 7 or 30) for the owner.
+	Dashboard(ctx context.Context, shopID string, days int) (Dashboard, error)
 
 	// Retention (background worker)
 	ClaimDueFiles(ctx context.Context, limit int) ([]DueFile, error)

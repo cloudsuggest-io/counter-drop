@@ -117,6 +117,23 @@ func (s *Server) queue(w http.ResponseWriter, r *http.Request) {
 	writeData(w, 200, q)
 }
 
+// dashboard returns the owner's summary for today (days=1, default), the last 7 or the last 30 days.
+func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
+	days := 1
+	switch r.URL.Query().Get("days") {
+	case "7":
+		days = 7
+	case "30":
+		days = 30
+	}
+	d, err := s.Store.Dashboard(r.Context(), principal(r.Context()).Staff.ShopID, days)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeData(w, 200, d)
+}
+
 func (s *Server) claimNext(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Lane string `json:"lane"`
@@ -146,10 +163,11 @@ func (s *Server) jobAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Reason     string `json:"reason"`
-		Paid       string `json:"paid"`
-		OtherPrice *int64 `json:"otherPricePaise"` // ready: the shop's price for Other files
-		NoReceipt  bool   `json:"noReceipt"`       // collected: don't give a receipt
+		Reason     string         `json:"reason"`
+		Paid       string         `json:"paid"`
+		OtherPrice *int64         `json:"otherPricePaise"` // ready: the shop's price for Other files
+		Pages      map[string]int `json:"pages"`           // ready: page counts for documents (file ID → pages)
+		NoReceipt  bool           `json:"noReceipt"`       // collected: don't give a receipt
 	}
 	if r.ContentLength != 0 {
 		if err := decode(r, &body); err != nil {
@@ -159,7 +177,7 @@ func (s *Server) jobAction(w http.ResponseWriter, r *http.Request) {
 	}
 	j, err := s.Store.Act(r.Context(), r.PathValue("id"), store.ActInput{
 		Action: action, Actor: actor(r), ShopID: principal(r.Context()).Staff.ShopID, Reason: body.Reason, Paid: body.Paid,
-		OtherPrice: body.OtherPrice, NoReceipt: body.NoReceipt,
+		OtherPrice: body.OtherPrice, Pages: body.Pages, NoReceipt: body.NoReceipt,
 	})
 	if err != nil {
 		s.fail(w, r, err)
@@ -178,7 +196,9 @@ func (s *Server) fileURL(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err)
 		return
 	}
-	download := r.URL.Query().Get("mode") == "download"
+	// Files the browser can't open itself (Word, Excel, HEIC…) can only be printed by downloading
+	// them, so they are always handed out — and recorded — as downloads.
+	download := r.URL.Query().Get("mode") == "download" || !domain.BrowserPrintable(f.Mime)
 	url, err := s.Objects.PresignGet(r.Context(), f.ObjectKey, f.Filename, f.Mime, download)
 	if err != nil {
 		s.fail(w, r, err)

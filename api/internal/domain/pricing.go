@@ -61,6 +61,7 @@ var (
 	ErrPageRange         = errors.New("page_range")
 	ErrOptionUnavailable = errors.New("option_unavailable")
 	ErrPriceRequired     = errors.New("price_required")
+	ErrPagesRequired     = errors.New("pages_required")
 )
 
 // ParsePageRange turns "1-3,5" into the selected page numbers (1-based, sorted, unique).
@@ -236,18 +237,58 @@ func priceVersion(pl PriceList, files []QuoteFile) string {
 	return hex.EncodeToString(sum[:])[:12]
 }
 
-// FileKind classifies a MIME type.
+// FileKind classifies a MIME type: "pdf", "image" (one page each) or "document" (Word, Excel,
+// PowerPoint, OpenDocument, text…). Documents can't be page-counted on the phone, so the shop
+// confirms the page count when it marks the job ready.
 func FileKind(mime string) string {
-	if strings.HasPrefix(mime, "image/") {
+	switch {
+	case mime == "application/pdf":
+		return "pdf"
+	case strings.HasPrefix(mime, "image/"):
 		return "image"
 	}
-	return "pdf"
+	return "document"
 }
 
+// AllowedMimes lists what customers can send. Anything that runs code when opened on the shop's
+// computer (programs, scripts, HTML, SVG, macro-enabled Office files) and archives are left out.
 var AllowedMimes = map[string]bool{
 	"application/pdf": true,
-	"image/jpeg":      true,
-	"image/png":       true,
-	"image/heic":      true,
-	"image/webp":      true,
+	// Photos and scans
+	"image/jpeg": true,
+	"image/png":  true,
+	"image/heic": true,
+	"image/heif": true,
+	"image/webp": true,
+	"image/gif":  true,
+	"image/bmp":  true,
+	"image/tiff": true,
+	// Word, Excel, PowerPoint
+	"application/msword": true,
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+	"application/vnd.ms-excel": true,
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         true,
+	"application/vnd.ms-powerpoint":                                             true,
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation": true,
+	// OpenDocument (LibreOffice), RTF, plain text
+	"application/vnd.oasis.opendocument.text":         true,
+	"application/vnd.oasis.opendocument.spreadsheet":  true,
+	"application/vnd.oasis.opendocument.presentation": true,
+	"application/rtf": true,
+	"text/rtf":        true,
+	"text/plain":      true,
+	"text/csv":        true,
 }
+
+// BrowserPrintable reports whether the shop's browser can open the file itself to print it.
+// Everything else (Word, Excel, HEIC, TIFF…) has to be downloaded and opened in an app.
+func BrowserPrintable(mime string) bool {
+	switch mime {
+	case "application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp", "text/plain":
+		return true
+	}
+	return false
+}
+
+// MaxConfirmedPages caps the page count staff can enter for one file.
+const MaxConfirmedPages = 2000

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Check, Download, ExternalLink, FileCheck2, FilePlus2, LogOut, ReceiptText, Moon, Play, Printer, QrCode, RotateCcw, Search, Settings, Sun, Undo2, UserRound, Volume2, VolumeX, X, Zap } from 'lucide-react'
+import { BarChart3, Check, Download, ExternalLink, FileCheck2, FilePlus2, LogOut, ReceiptText, Moon, Play, Printer, QrCode, RotateCcw, Search, Settings, Sun, Undo2, UserRound, Volume2, VolumeX, X, Zap } from 'lucide-react'
 import { ApiError } from '@/lib/api'
 import { chime, useLive, type LiveTicket } from '@/lib/live'
 import { clock, dayTime, minutesSince, mmss, rupees } from '@/lib/format'
-import type { Job, JobState, OnlineState, QueueSnapshot } from '@/lib/types'
+import type { Job, JobFile, JobState, OnlineState, PriceList, QueueSnapshot } from '@/lib/types'
+import { browserPrintable } from '@/lib/upload'
 import { Banner, Button, Chip, Logo, Spinner } from '@/components/ui'
 import { useShopAuth, useShopTheme } from './auth'
 
@@ -42,7 +43,39 @@ function priceLabel(j: Job): string {
   return needsOtherPrice(j) ? `${rupees(j.priceTotalPaise)} + ?` : rupees(j.priceTotalPaise)
 }
 
-type ActBody = Record<string, string | number | boolean>
+/** Printed files whose pages the phone couldn't count (Word, Excel…): staff enter them on Ready. */
+const pagesNeeded = (j: Job) => j.files.filter((f) => !f.settings.other && f.deleteStatus === 'active' && f.pages <= 0)
+const needsReadyDialog = (j: Job) => needsOtherPrice(j) || (j.pagesToConfirm && pagesNeeded(j).length > 0)
+
+/** How many pages a range like "1-3,5" selects out of n (empty = all). Mirrors domain.ParsePageRange. */
+function selectedPages(expr: string | undefined, n: number): number {
+  const e = (expr ?? '').replace(/\s/g, '')
+  if (!e) return n
+  const set = new Set<number>()
+  for (const part of e.split(',')) {
+    const [a = 0, b = a] = part.split('-').map(Number)
+    for (let p = a; p <= b && p <= n; p++) if (p >= 1) set.add(p)
+  }
+  return set.size
+}
+
+/** Estimate of the printed-files price with the entered page counts. The server reprices on Ready. */
+function estimatePaise(pl: PriceList, files: JobFile[], entered: Record<string, number>): number {
+  let total = 0
+  for (const f of files) {
+    if (f.settings.other || f.deleteStatus !== 'active') continue
+    const pages = f.pages > 0 ? f.pages : entered[f.id] ?? 0
+    const n = selectedPages(f.settings.pageRange, pages)
+    const one = f.settings.colour ? pl.colourOnePaise : pl.bwOnePaise
+    let both = f.settings.colour ? pl.colourBothPaise : pl.bwBothPaise
+    if (both === 0) both = 2 * one
+    total += f.settings.bothSides ? f.settings.copies * Math.ceil(n / 2) * both : f.settings.copies * n * one
+  }
+  if (total > 0 && total < pl.minChargePaise) total = pl.minChargePaise
+  return Math.round(total / 100) * 100
+}
+
+type ActBody = Record<string, unknown>
 
 export default function BoardPage() {
   const { session, call, logout, setShop } = useShopAuth()
@@ -59,7 +92,7 @@ export default function BoardPage() {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Job[] | null>(null)
   const [now, setNow] = useState(Date.now())
-  const [pricing, setPricing] = useState<Job | null>(null) // Ready on a job with Other files: ask for the price
+  const [pricing, setPricing] = useState<Job | null>(null) // Ready on a job with Other files or uncounted pages: ask first
   const [noReceipt, setNoReceipt] = useState<Record<string, boolean>>({}) // per job; receipts are on by default
   const known = useRef<Set<string> | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -102,7 +135,7 @@ export default function BoardPage() {
   }
 
   const act = async (job: Job, action: string, body: ActBody = {}) => {
-    if (action === 'ready' && needsOtherPrice(job) && body.otherPricePaise === undefined) {
+    if (action === 'ready' && needsReadyDialog(job) && body.otherPricePaise === undefined && body.pages === undefined) {
       setPricing(job)
       return
     }
@@ -279,6 +312,11 @@ export default function BoardPage() {
               <QrCode className="h-5 w-5" />
             </Link>
             {isOwner && (
+              <Link to="/shop/dashboard" className="rounded p-2 hover:bg-surface-tint" aria-label="Dashboard" title="Dashboard — earnings and stats">
+                <BarChart3 className="h-5 w-5" />
+              </Link>
+            )}
+            {isOwner && (
               <Link to="/shop/settings" className="rounded p-2 hover:bg-surface-tint" aria-label="Settings" title="Settings">
                 <Settings className="h-5 w-5" />
               </Link>
@@ -367,7 +405,7 @@ export default function BoardPage() {
           toggleReceipt={() => setNoReceipt((m) => ({ ...m, [openJob.id]: !m[openJob.id] }))}
         />
       )}
-      {pricing && <OtherPriceDialog job={pricing} onCancel={() => setPricing(null)} onConfirm={(paise) => act(pricing, 'ready', { otherPricePaise: paise })} />}
+      {pricing && <ReadyDialog job={pricing} prices={snap.shop.prices} onCancel={() => setPricing(null)} onConfirm={(body) => act(pricing, 'ready', body)} />}
       {copiesOpen && snap.copiesToDelete.length > 0 && (
         <CopiesDrawer
           jobs={snap.copiesToDelete}
@@ -559,8 +597,9 @@ function JobPanel({
     }
   }
   // Download: saves the file on this computer. The customer is told, and the shop must delete it later.
-  const downloadFile = async (fileId: string, name: string) => {
-    if (!window.confirm(`Download "${name}" to this computer?\n\nThe customer will be told you downloaded it. Delete it after the job and tap "Copies deleted".`)) return
+  const downloadFile = async (fileId: string, name: string, needsApp = false) => {
+    const why = needsApp ? `"${name}" can't open in the browser — download it and print from Word, Excel or your photo app.` : `Download "${name}" to this computer?`
+    if (!window.confirm(`${why}\n\nThe customer will be told you downloaded it. Delete it after the job and tap "Copies deleted".`)) return
     try {
       const { url } = await call<{ url: string }>(`/shop/jobs/${job.id}/files/${fileId}/url?mode=download`)
       const a = document.createElement('a')
@@ -598,12 +637,20 @@ function JobPanel({
                 <span className="min-w-0 flex-1 truncate font-semibold">{f.filename || 'Deleted file'}</span>
                 {!f.deletedAt && job.state !== 'cancelled' && (
                   <>
-                    <Button size="sm" variant="secondary" onClick={() => printFile(f.id)}>
-                      <ExternalLink className="h-4 w-4" aria-hidden /> Print
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => downloadFile(f.id, f.filename)} aria-label={`Download ${f.filename}`} title="Download (customer is told)">
-                      <Download className="h-4 w-4" aria-hidden />
-                    </Button>
+                    {browserPrintable(f.mime) ? (
+                      <>
+                        <Button size="sm" variant="secondary" onClick={() => printFile(f.id)}>
+                          <ExternalLink className="h-4 w-4" aria-hidden /> Print
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => downloadFile(f.id, f.filename)} aria-label={`Download ${f.filename}`} title="Download (customer is told)">
+                          <Download className="h-4 w-4" aria-hidden />
+                        </Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="secondary" onClick={() => downloadFile(f.id, f.filename, true)} title="Opens in Word/Excel on this computer (customer is told)">
+                        <Download className="h-4 w-4" aria-hidden /> Download to print
+                      </Button>
+                    )}
                   </>
                 )}
               </div>
@@ -624,7 +671,7 @@ function JobPanel({
                 </div>
               ) : (
                 <div className="mt-1 text-sm font-bold">
-                  {f.pagesStatus === 'unknown' ? 'Pages: count at counter' : `${f.pages} page${f.pages === 1 ? '' : 's'}`}
+                  {f.pages <= 0 ? 'Pages: count when printing' : `${f.pages} page${f.pages === 1 ? '' : 's'}${f.pagesStatus === 'confirmed' ? ' (you counted)' : ''}`}
                   {f.settings.pageRange ? ` · print pages ${f.settings.pageRange}` : ''} · {f.settings.colour ? 'COLOUR' : 'B/W'} · {f.settings.bothSides ? 'BOTH SIDES' : 'ONE SIDE'} · ×
                   {f.settings.copies}
                 </div>
@@ -639,6 +686,7 @@ function JobPanel({
             <p className="px-1 text-xs text-ink-muted">Includes {rupees(job.otherPricePaise)} you set for Other files.</p>
           )}
           {needsOtherPrice(job) && <p className="px-1 text-xs text-ink-muted">You'll enter the price for Other files when you mark it ready.</p>}
+          {job.pagesToConfirm && <p className="px-1 text-xs text-ink-muted">Count the pages when you open the file — you'll enter them when you mark it ready, and the price is worked out from your price list.</p>}
         </div>
         <div className="space-y-2 border-t border-line p-4">
           {job.state === 'queued' && (
@@ -759,51 +807,95 @@ function CopiesDrawer({ jobs, onClose, onOpen, markCopiesDeleted }: { jobs: Job[
   )
 }
 
-/** Ask for the shop's price for Other files before marking a job ready. */
-function OtherPriceDialog({ job, onCancel, onConfirm }: { job: Job; onCancel: () => void; onConfirm: (paise: number) => void }) {
+/** Before marking ready: page counts for documents the phone couldn't count, and the price for Other files. */
+function ReadyDialog({ job, prices, onCancel, onConfirm }: { job: Job; prices: PriceList; onCancel: () => void; onConfirm: (body: ActBody) => void }) {
+  const docs = job.pagesToConfirm ? pagesNeeded(job) : []
+  const askPrice = needsOtherPrice(job)
+  const [pages, setPages] = useState<Record<string, string>>({})
   const [value, setValue] = useState('')
+  const counts: Record<string, number> = {}
+  for (const f of docs) counts[f.id] = Number(pages[f.id] || 0)
+  const pagesValid = docs.every((f) => {
+    const n = counts[f.id] ?? 0
+    return Number.isInteger(n) && n >= 1 && n <= 2000
+  })
   const rupeesIn = Number(value)
-  const valid = value.trim() !== '' && Number.isFinite(rupeesIn) && rupeesIn >= 0 && rupeesIn <= 50000
-  const paise = valid ? Math.round(rupeesIn * 100) : 0
+  const priceValid = !askPrice || (value.trim() !== '' && Number.isFinite(rupeesIn) && rupeesIn >= 0 && rupeesIn <= 50000)
+  const paise = askPrice && priceValid ? Math.round(rupeesIn * 100) : 0
+  const valid = pagesValid && priceValid
+  const printed = docs.length > 0 ? (pagesValid ? estimatePaise(prices, job.files, counts) : null) : job.priceTotalPaise - (job.otherPricePaise ?? 0)
   const items = otherFiles(job)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.72)] p-4" onClick={onCancel}>
       <form
         role="dialog"
-        aria-label={`Price for ${job.token}`}
-        className="w-full max-w-sm space-y-3 rounded border-2 border-ink bg-surface p-4"
+        aria-label={`Mark ${job.token} ready`}
+        className="max-h-full w-full max-w-sm space-y-3 overflow-auto rounded border-2 border-ink bg-surface p-4"
         onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault()
-          if (valid) onConfirm(paise)
+          if (!valid) return
+          const body: ActBody = {}
+          if (docs.length) body.pages = counts
+          if (askPrice) body.otherPricePaise = paise
+          onConfirm(body)
         }}
       >
         <h2 className="text-lg font-bold">
-          <span className="font-mono">{job.token}</span> · price for Other files
+          <span className="font-mono">{job.token}</span> · {docs.length ? 'pages' : 'price'}
+          {docs.length && askPrice ? ' & price' : ''}
         </h2>
-        <ul className="space-y-1 text-sm">
-          {items.map((f) => (
-            <li key={f.id} className="rounded bg-surface-tint p-2">
-              <span className="block truncate font-semibold">{f.filename}</span>
-              {f.settings.note && <span className="block">“{f.settings.note}”</span>}
-            </li>
-          ))}
-        </ul>
-        <label className="block text-sm font-semibold">
-          Your price (₹)
-          <input
-            autoFocus
-            inputMode="decimal"
-            value={value}
-            onChange={(e) => setValue(e.target.value.replace(/[^0-9.]/g, ''))}
-            className="mt-1 h-12 w-full rounded border-[1.5px] border-line bg-surface px-3 font-mono text-xl"
-            placeholder="0"
-            aria-label="Price in rupees"
-          />
-        </label>
+        {docs.length > 0 && (
+          <fieldset className="space-y-2">
+            <legend className="text-sm text-ink-muted">How many pages does each file have? (whole document, before copies)</legend>
+            {docs.map((f, i) => (
+              <label key={f.id} className="flex items-center gap-2 rounded bg-surface-tint p-2 text-sm">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold">{f.filename}</span>
+                  <span className="block text-xs text-ink-muted">
+                    {f.settings.colour ? 'Colour' : 'B/W'} · {f.settings.bothSides ? 'both sides' : 'one side'} · ×{f.settings.copies}
+                  </span>
+                </span>
+                <input
+                  autoFocus={i === 0}
+                  inputMode="numeric"
+                  value={pages[f.id] ?? ''}
+                  onChange={(e) => setPages((p) => ({ ...p, [f.id]: e.target.value.replace(/[^0-9]/g, '').slice(0, 4) }))}
+                  className="h-11 w-20 rounded border-[1.5px] border-line bg-surface px-2 text-right font-mono text-lg"
+                  placeholder="0"
+                  aria-label={`Pages in ${f.filename}`}
+                />
+              </label>
+            ))}
+          </fieldset>
+        )}
+        {askPrice && (
+          <>
+            <ul className="space-y-1 text-sm">
+              {items.map((f) => (
+                <li key={f.id} className="rounded bg-surface-tint p-2">
+                  <span className="block truncate font-semibold">{f.filename}</span>
+                  {f.settings.note && <span className="block">“{f.settings.note}”</span>}
+                </li>
+              ))}
+            </ul>
+            <label className="block text-sm font-semibold">
+              Your price for Other files (₹)
+              <input
+                autoFocus={docs.length === 0}
+                inputMode="decimal"
+                value={value}
+                onChange={(e) => setValue(e.target.value.replace(/[^0-9.]/g, ''))}
+                className="mt-1 h-12 w-full rounded border-[1.5px] border-line bg-surface px-3 font-mono text-xl"
+                placeholder="0"
+                aria-label="Price in rupees"
+              />
+            </label>
+          </>
+        )}
         <div className="flex justify-between rounded bg-surface-tint p-3 text-sm">
           <span>Total for the customer</span>
-          <span className="font-mono text-lg font-bold">{rupees(job.priceTotalPaise + paise)}</span>
+          <span className="font-mono text-lg font-bold">{printed === null ? '₹ ?' : rupees(printed + paise)}</span>
         </div>
         <div className="flex gap-2">
           <Button type="button" variant="secondary" className="flex-1" onClick={onCancel}>

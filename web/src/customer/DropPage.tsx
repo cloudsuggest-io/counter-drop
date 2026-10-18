@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { AlertTriangle, FileText, Image as ImageIcon, Plus, ShieldCheck, Trash2, WifiOff, Clock, RotateCw } from 'lucide-react'
+import { AlertTriangle, FileText, FileType, Image as ImageIcon, Plus, ShieldCheck, Trash2, WifiOff, Clock, RotateCw } from 'lucide-react'
 import { api, ApiError } from '@/lib/api'
 import { useI18n } from '@/lib/i18n'
 import { rupees, hhmm, bytes } from '@/lib/format'
 import { checkPdf } from '@/lib/pdf'
-import { uploadFile, mimeOf, ACCEPTED, ALLOWED_MIMES } from '@/lib/upload'
+import { uploadFile, mimeOf, fileKind, ACCEPTED, ALLOWED_MIMES } from '@/lib/upload'
 import { saveTicket, savedTickets } from '@/lib/tickets'
 import type { PublicShop, Ticket, UploadTarget, FileSettings } from '@/lib/types'
 import { Banner, Button, Card, Chip, LangSwitch, Logo, Segmented, Spinner, Stepper } from '@/components/ui'
@@ -134,7 +134,7 @@ export default function DropPage() {
     for (const file of picked) {
       const mime = mimeOf(file)
       if (!ALLOWED_MIMES.has(mime)) {
-        setError(`${file.name}: we can print PDF and photos. Save documents as PDF first.`)
+        setError(t('fileNotSupported', { name: file.name }))
         continue
       }
       if (file.size > MAX_FILE_MB * 1024 * 1024) {
@@ -145,7 +145,7 @@ export default function DropPage() {
         clientId: nextId(),
         file,
         mime,
-        pages: mime.startsWith('image/') ? 1 : 0,
+        pages: fileKind(mime) === 'image' ? 1 : 0,
         status: 'checking',
         progress: 0,
         pageRange: '',
@@ -639,7 +639,8 @@ function FileRow({
   const [note, setNote] = useState(lf.note)
   const [editRange, setEditRange] = useState(false)
   const [range, setRange] = useState(lf.pageRange)
-  const Icon = lf.mime.startsWith('image/') ? ImageIcon : FileText
+  const kind = fileKind(lf.mime)
+  const Icon = kind === 'image' ? ImageIcon : kind === 'document' ? FileType : FileText
   const bad = lf.status === 'error' || lf.status === 'locked'
   return (
     <div className={`rounded border-[1.5px] bg-surface p-3 ${bad ? 'border-danger' : 'border-line'}`}>
@@ -723,6 +724,7 @@ function FileRow({
           {lf.other && lf.error && !bad && <p className="text-sm text-danger">{lf.error}</p>}
         </div>
       )}
+      {lf.status === 'done' && !lf.other && kind === 'document' && <p className="mt-2 text-xs text-ink-muted">{t('docPagesNote')}</p>}
       {lf.status === 'done' && !lf.other && lf.mime === 'application/pdf' && lf.pages > 1 && (
         <div className="mt-2 text-sm">
           {editRange ? (

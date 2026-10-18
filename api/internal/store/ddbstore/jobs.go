@@ -343,6 +343,38 @@ func (s *Store) Submit(ctx context.Context, jobID, priceVersion, name string) (d
 	return r.domainJob(), quote, nil
 }
 
+// confirmPages records the page counts staff entered for files the phone couldn't count and
+// reprices the job with the shop's current price list.
+func (s *Store) confirmPages(ctx context.Context, r *jobRec, pages map[string]int) error {
+	for id, n := range pages {
+		f := r.file(id)
+		if f == nil || f.RemovedAt != nil {
+			return store.ErrNotFound
+		}
+		if f.F.Settings.Other || domain.FileKind(f.F.Mime) == "image" || f.F.PagesStatus == domain.PagesCounted {
+			continue // counted on the phone (or not printed): nothing to confirm
+		}
+		if n < 1 || n > domain.MaxConfirmedPages {
+			return fmt.Errorf("%w: pages must be 1 to %d", domain.ErrValidation, domain.MaxConfirmedPages)
+		}
+		f.F.Pages, f.F.PagesStatus = n, domain.PagesConfirmed
+	}
+	sh, err := s.GetShopByID(ctx, r.Job.ShopID)
+	if err != nil {
+		return err
+	}
+	q, err := store.QuoteFor(sh, r.domainJob())
+	if err != nil {
+		return err
+	}
+	other := int64(0)
+	if r.Job.OtherPrice != nil {
+		other = *r.Job.OtherPrice
+	}
+	r.Job.PriceTotal, r.Job.PagesTotal, r.Job.PagesToConfirm = q.TotalPaise+other, q.PagesTotal, q.PagesToConfirm
+	return nil
+}
+
 // apply runs a state transition on the record and carries out its effects on the files.
 func (s *Store) apply(r *jobRec, in store.ActInput, now time.Time) (*jobEvent, error) {
 	from := r.Job.State
@@ -397,6 +429,16 @@ func (s *Store) Act(ctx context.Context, jobID string, in store.ActInput) (domai
 	r, err := s.mutateJob(ctx, jobID, func(r *jobRec, now time.Time) (*jobEvent, error) {
 		if in.Actor.Type == domain.ActorStaff && (r.Job.ShopID != in.ShopID || r.Job.State == domain.JobStateUploading) {
 			return nil, store.ErrNotFound
+		}
+		if in.Action == domain.ActionReady {
+			if len(in.Pages) > 0 {
+				if err := s.confirmPages(ctx, r, in.Pages); err != nil {
+					return nil, err
+				}
+			}
+			if r.Job.PagesToConfirm {
+				return nil, domain.ErrPagesRequired
+			}
 		}
 		return s.apply(r, in, now)
 	})

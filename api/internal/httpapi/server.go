@@ -101,6 +101,7 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("GET "+p+"/ws", s.localWS)
 	}
 	mux.HandleFunc("GET "+p+"/shop/deletion-health", s.owner(s.deletionHealth))
+	mux.HandleFunc("GET "+p+"/shop/dashboard", s.owner(s.dashboard))
 
 	if s.Local != nil {
 		mux.Handle(p+"/files/", s.Local.Handler())

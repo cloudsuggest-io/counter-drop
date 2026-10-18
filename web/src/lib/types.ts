@@ -19,7 +19,8 @@ export interface JobFile {
   size: number
   mime: string
   pages: number
-  pagesStatus: 'pending' | 'counted' | 'unknown'
+  /** confirmed: the phone couldn't count the pages (Word, Excel…) and staff entered them. */
+  pagesStatus: 'pending' | 'counted' | 'unknown' | 'confirmed'
   settings: FileSettings
   uploadStatus: 'pending' | 'uploaded'
   deleteStatus: 'active' | 'pending' | 'deleted' | 'failed'
@@ -202,4 +203,35 @@ export interface SetupInfo {
   role: 'owner' | 'staff'
   purpose: 'setup' | 'reset'
   expiresAt: string
+}
+
+/** GET /shop/dashboard?days=1|7|30 (owner only). Mirrors store.Dashboard; seconds and paise. */
+export interface Dashboard {
+  days: 1 | 7 | 30
+  from: string
+  to: string
+  serverTime: string
+  earnings: { totalPaise: number; cashPaise: number; upiPaise: number; unrecordedPaise: number; unrecordedJobs: number }
+  previous: { paise: number; jobs: number; label: string }
+  jobs: { submitted: number; collected: number; cancelled: number; files: number; avgBillPaise: number; maxBillPaise: number }
+  pages: {
+    printed: number
+    sheets: number
+    bw: number
+    colour: number
+    oneSide: number
+    bothSides: number
+    pdfFiles: number
+    photoFiles: number
+    docFiles: number
+    otherFiles: number
+    otherPaise: number
+  }
+  speed: { waitSec: number; printSec: number; pickupSec: number; withinTenPct: number; samples: number }
+  hours: { hour: number; jobs: number; prev: number }[]
+  series: { day: string; paise: number; jobs: number; prevPaise: number; prevJobs: number }[]
+  staff: { name: string; jobs: number; pages: number; avgPrintSec: number; cashPaise: number; upiPaise: number }[]
+  now: { inLine: number; printing: number; ready: number; oldestReadyToken?: string; oldestReadyMin: number; copiesToConfirm: number; pagesToConfirm: number }
+  problems: { cancelledByCustomer: number; cancelledByShop: number; notCollected: number; noReceipt: number; longWaits: number }
+  filesDeleted: number
 }

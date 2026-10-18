@@ -54,12 +54,60 @@ function waitOnline(): Promise<void> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-/** Browsers sometimes report an empty MIME type (HEIC on Android). */
-export function mimeOf(file: File): string {
-  if (file.type) return file.type
-  const ext = file.name.split('.').pop()?.toLowerCase()
-  return ({ pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', heic: 'image/heic', webp: 'image/webp' } as Record<string, string>)[ext ?? ''] ?? 'application/octet-stream'
+// What customers can send. Keep in step with domain.AllowedMimes on the API.
+// Programs, scripts, HTML/SVG, macro-enabled Office files and archives are left out on purpose:
+// they can run code when opened on the shop's computer.
+const BY_EXT: Record<string, string> = {
+  pdf: 'application/pdf',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  bmp: 'image/bmp',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  odt: 'application/vnd.oasis.opendocument.text',
+  ods: 'application/vnd.oasis.opendocument.spreadsheet',
+  odp: 'application/vnd.oasis.opendocument.presentation',
+  rtf: 'application/rtf',
+  txt: 'text/plain',
+  csv: 'text/csv',
 }
 
-export const ACCEPTED = '.pdf,.jpg,.jpeg,.png,.heic,.webp,application/pdf,image/jpeg,image/png,image/heic,image/webp'
-export const ALLOWED_MIMES = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/heic', 'image/webp'])
+export const ALLOWED_MIMES = new Set([...Object.values(BY_EXT), 'text/rtf'])
+
+/**
+ * The MIME type to upload with. Browsers often report an empty or generic type (HEIC on Android,
+ * Word files from WhatsApp downloads come through as application/octet-stream), so an unknown
+ * type falls back to the file extension.
+ */
+export function mimeOf(file: File): string {
+  if (ALLOWED_MIMES.has(file.type)) return file.type
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  return BY_EXT[ext] ?? (file.type || 'application/octet-stream')
+}
+
+export const ACCEPTED = [...Object.keys(BY_EXT).map((e) => '.' + e), ...ALLOWED_MIMES].join(',')
+
+export type FileKind = 'pdf' | 'image' | 'document'
+
+/** Same split as domain.FileKind: documents can't be page-counted on the phone. */
+export function fileKind(mime: string): FileKind {
+  if (mime === 'application/pdf') return 'pdf'
+  if (mime.startsWith('image/')) return 'image'
+  return 'document'
+}
+
+/** Files the shop's browser can open to print; the rest are downloaded (and the customer told). */
+export function browserPrintable(mime: string): boolean {
+  return ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'text/plain'].includes(mime)
+}

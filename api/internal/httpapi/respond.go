@@ -84,6 +84,8 @@ func mapError(err error) (int, string, string) {
 		return 422, "option_unavailable", "This shop doesn't offer colour printing."
 	case errors.Is(err, domain.ErrPriceRequired):
 		return 422, "price_required", "Enter the price for the Other files before marking this ready."
+	case errors.Is(err, domain.ErrPagesRequired):
+		return 422, "pages_required", "Enter the page count for each document before marking this ready."
 	case errors.Is(err, domain.ErrValidation):
 		return 422, "validation", strings.TrimPrefix(err.Error(), domain.ErrValidation.Error()+": ")
 	}

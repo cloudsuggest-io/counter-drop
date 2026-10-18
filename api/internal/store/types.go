@@ -60,7 +60,10 @@ type ActInput struct {
 	Paid   string // "", cash, upi — recorded on collected (reports only)
 	// OtherPrice is the shop's price for Other files, required to mark such a job ready.
 	OtherPrice *int64
-	NoReceipt  bool // on collected: the shop chose not to give a receipt
+	// Pages are the page counts staff entered (file ID → pages) for files the phone couldn't count
+	// (Word, Excel…). Required on ready while the job still has pages to confirm.
+	Pages     map[string]int
+	NoReceipt bool // on collected: the shop chose not to give a receipt
 }
 
 type QueueSnapshot struct {

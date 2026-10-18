@@ -587,6 +587,10 @@ paths:
                   type: integer
                   format: int64
                   description: Ready only. The shop's price for files sent as Other (0–5000000); required when the job has any (422 price_required).
+                pages:
+                  type: object
+                  additionalProperties: { type: integer, minimum: 1, maximum: 2000 }
+                  description: Ready only. Page counts staff entered (file ID → pages) for files the phone couldn't count (Word, Excel…). Required while the job has pagesToConfirm (422 pages_required); the job is repriced from the price list.
                 noReceipt:
                   type: boolean
                   description: Collected only. The shop chose not to give a receipt (default false = receipt).
@@ -772,6 +776,34 @@ paths:
                       data:
                         $ref: "#/components/schemas/DeletionHealth"
 
+  /api/v1/cd/shop/dashboard:
+    get:
+      tags: [Shop Settings]
+      summary: Owner dashboard — earnings, jobs, pages, speed, staff, live counts
+      description: >-
+        Owner only. Money is counted by collection time, pages and speed by ready time, jobs and
+        hours by send time (business days in the shop's time zone). "Today" is compared with the
+        same weekday last week up to the same time of day; 7 and 30 days with the previous window.
+        The full response shape is store.Dashboard in api/internal/store/dashboard.go.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: days
+          in: query
+          schema: { type: integer, enum: [1, 7, 30], default: 1 }
+      responses:
+        "200":
+          description: Dashboard
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/DataEnvelope"
+                  - type: object
+                    properties:
+                      data: { type: object, description: "See store.Dashboard" }
+        "403": { $ref: "#/components/responses/Error" }
+
 components:
   securitySchemes:
     BearerAuth:
@@ -910,7 +942,8 @@ components:
       enum: [active, pending, deleted, failed]
     PagesStatus:
       type: string
-      enum: [pending, counted, unknown]
+      enum: [pending, counted, unknown, confirmed]
+      description: "confirmed: the phone couldn't count the pages (Word, Excel…); staff entered them when marking the job ready."
 
     PriceList:
       type: object
@@ -1087,7 +1120,30 @@ components:
         size: { type: integer, format: int64 }
         mime:
           type: string
-          enum: [application/pdf, image/jpeg, image/png, image/heic, image/webp]
+          description: Documents (Word, Excel, PowerPoint, OpenDocument, RTF, text) can't be page-counted on the phone; the shop confirms pages at the counter and can only download them to print.
+          enum:
+            - application/pdf
+            - image/jpeg
+            - image/png
+            - image/heic
+            - image/heif
+            - image/webp
+            - image/gif
+            - image/bmp
+            - image/tiff
+            - application/msword
+            - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+            - application/vnd.ms-excel
+            - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+            - application/vnd.ms-powerpoint
+            - application/vnd.openxmlformats-officedocument.presentationml.presentation
+            - application/vnd.oasis.opendocument.text
+            - application/vnd.oasis.opendocument.spreadsheet
+            - application/vnd.oasis.opendocument.presentation
+            - application/rtf
+            - text/rtf
+            - text/plain
+            - text/csv
     UploadTarget:
       type: object
       properties:

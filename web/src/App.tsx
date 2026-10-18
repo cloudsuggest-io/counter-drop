@@ -12,6 +12,7 @@ import SettingsPage from '@/shop/SettingsPage'
 import QrPage from '@/shop/QrPage'
 import SetupPage from '@/shop/SetupPage'
 import AccountPage from '@/shop/AccountPage'
+import DashboardPage from '@/shop/DashboardPage'
 
 // Customer routes (/, /s/:slug, /t/:jobId) and /shop/login, /shop/setup are public; other /shop/* need a staff session.
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
             <Route path="/shop" element={<RequireStaff><BoardPage /></RequireStaff>} />
             <Route path="/shop/qr" element={<RequireStaff><QrPage /></RequireStaff>} />
             <Route path="/shop/settings" element={<RequireStaff owner><SettingsPage /></RequireStaff>} />
+            <Route path="/shop/dashboard" element={<RequireStaff owner><DashboardPage /></RequireStaff>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </ShopAuthProvider>

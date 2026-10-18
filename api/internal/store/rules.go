@@ -237,7 +237,7 @@ func ValidateFiles(files []NewFile, lim Limits, existing int64, existingCount in
 	total := existing
 	for _, f := range files {
 		if !domain.AllowedMimes[f.Mime] {
-			return fmt.Errorf("%w: we can print PDF and photos (JPG, PNG, HEIC, WebP)", domain.ErrValidation)
+			return fmt.Errorf("%w: we can print PDF, photos, Word, Excel, PowerPoint and text files", domain.ErrValidation)
 		}
 		if f.Size <= 0 || f.Size > lim.MaxFileBytes {
 			return fmt.Errorf("%w: each file must be under %d MB", domain.ErrValidation, lim.MaxFileBytes>>20)
