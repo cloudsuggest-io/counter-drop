@@ -9,6 +9,18 @@
     <link rel="alternate icon" href="/favicon-64.png" type="image/png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <title>Counter Drop</title>
+    <!-- Link previews (WhatsApp, Telegram, X, LinkedIn, iMessage). Crawlers need an absolute image URL:
+         VITE_PUBLIC_URL is set in vite.config.ts (defaults to the production domain). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Counter Drop" />
+    <meta property="og:title" content="Counter Drop · Send files to the print counter" />
+    <meta property="og:description" content="Scan the shop's QR, send your files, get a token. No WhatsApp, no phone number. Files deleted after pickup." />
+    <meta property="og:url" content="%VITE_PUBLIC_URL%/" />
+    <meta property="og:image" content="%VITE_PUBLIC_URL%/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Counter Drop: drop it, print it, chill." />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
     <div id="root"></div>

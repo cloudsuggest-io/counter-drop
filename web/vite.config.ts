@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
 
+// Absolute site address for link-preview tags in index.html (%VITE_PUBLIC_URL%). Set VITE_PUBLIC_URL
+// in the build environment if the site moves; no trailing slash.
+process.env.VITE_PUBLIC_URL ||= 'https://counterdrop.cloudsuggest.in'
+
 // In dev, the API runs on :8080 and Vite proxies /api to it, so phones on the LAN
 // only need to reach the Vite server (npm run dev -- --host).
 export default defineConfig({

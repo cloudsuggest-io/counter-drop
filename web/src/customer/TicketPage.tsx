@@ -10,7 +10,7 @@ import type { Job, JobState, Ticket } from '@/lib/types'
 import { Banner, Button, Card, Spinner, stateMeta } from '@/components/ui'
 import { Shell } from './DropPage'
 import { InstallCard } from '@/components/InstallCard'
-import { downloadReceipt } from '@/lib/receipt'
+import { downloadReceipt, shareReceipt, type ReceiptData } from '@/lib/receipt'
 
 const steps: { state: JobState; key: Key }[] = [
   { state: 'queued', key: 'inLine' },
@@ -37,6 +37,7 @@ export default function TicketPage() {
   })
   const [ticket, setTicket] = useState<Ticket | null>(null)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [soundOn, setSoundOn] = useState(() => store.get(`cd:sound:${jobId}`) === 'on')
   const [now, setNow] = useState(Date.now())
   const lastState = useRef<JobState | null>(null)
@@ -157,60 +158,83 @@ export default function TicketPage() {
   const otherPending = hasOther && job.otherPricePaise === undefined
   const fileDetail = (f: Job['files'][number]) => (f.settings.other ? t('otherUse') : f.pages ? `${f.pages} pp` : '')
 
+  // Link in the shared image and message: opens the app (and offers to install it). `src` tells us
+  // how many people arrive from shared receipts.
+  const appUrl = `${window.location.origin}/?src=receipt`
+  // A saved or shared receipt can't count down: give the clock time instead of "in 9:58".
+  const ourCopyFixed = job.filesDeletedAt || !deleteAt ? ourCopy : t('rOurDeleteAt', { time: clock(new Date(deleteAt).toISOString()) })
+  const pagesTotal = job.pagesTotal || job.files.reduce((s, f) => s + (f.pages || 0), 0)
+  const receiptFile = `CounterDrop-${shop.slug}-${job.token ?? job.id}.png`
+
+  const receiptData = (): ReceiptData => {
+    const printPaise = job.priceTotalPaise - (job.otherPricePaise ?? 0)
+    return {
+      title: t('receipt'),
+      shopName: shop.name,
+      shopAddress: shop.address,
+      token: job.token ?? '',
+      status: t('collected'),
+      when: dayTime(job.collectedAt),
+      files: job.files.map((f, i) => ({ name: fileName(i), detail: fileDetail(f) })),
+      rows:
+        job.otherPricePaise !== undefined
+          ? [
+              { label: t('printIt'), value: rupees(printPaise) },
+              { label: t('otherUse'), value: rupees(job.otherPricePaise) },
+            ]
+          : [],
+      total: { label: t('rAmount'), value: rupees(job.priceTotalPaise) },
+      paid: { label: t('rPaid'), value: paidLabel(job, t) },
+      notes: [
+        { label: t('rOurCopy'), value: ourCopyFixed },
+        { label: t('rShopCopies'), value: shopCopies },
+      ].filter((n) => n.value),
+      appUrl,
+      tagline: t('receiptTagline'),
+      footer: `Receipt ${job.id}`,
+    }
+  }
+
+  // The message that travels with the image. *Bold* renders on WhatsApp and Telegram; elsewhere the
+  // asterisks are harmless. Short lines so it reads well in a chat bubble and a notification.
+  const shareText = (): string => {
+    const collected = job.state === 'collected'
+    const head = [`🧾 *${t('shareHeading')}*`, `*${shop.name}*${job.token ? ` · ${job.token}` : ''}`, collected ? dayTime(job.collectedAt) : '']
+    const body = collected
+      ? [`📄 ${t('shareFiles', { n: job.files.length, p: pagesTotal })}`, `💰 ${t('rAmount')}: *${rupees(job.priceTotalPaise)}* · ${paidLabel(job, t)}`]
+      : [t(job.cancelReason === 'not_collected' ? 'notCollected' : 'cancelledNote')]
+    const proof = [`🔒 ${t('rOurCopy')}: ${ourCopyFixed}`, `${t('rShopCopies')}: ${shopCopies}`]
+    const cta = [`${t('shareCta')} 👉 ${appUrl}`]
+    return [head, body, proof, cta]
+      .map((g) => g.filter(Boolean).join('\n'))
+      .filter(Boolean)
+      .join('\n\n')
+  }
+
   const saveReceipt = async () => {
     try {
-      const printPaise = job.priceTotalPaise - (job.otherPricePaise ?? 0)
-      await downloadReceipt(
-        {
-          title: t('receipt'),
-          shopName: shop.name,
-          shopAddress: shop.address,
-          token: job.token ?? '',
-          when: dayTime(job.collectedAt),
-          files: job.files.map((f, i) => ({ name: fileName(i), detail: fileDetail(f) })),
-          rows:
-            job.otherPricePaise !== undefined
-              ? [
-                  { label: t('printIt'), value: rupees(printPaise) },
-                  { label: t('otherUse'), value: rupees(job.otherPricePaise) },
-                ]
-              : [],
-          total: { label: t('rAmount'), value: rupees(job.priceTotalPaise) },
-          paid: { label: t('rPaid'), value: paidLabel(job, t) },
-          notes: [
-            // A saved image can't count down: give the clock time instead of "in 9:58".
-            { label: t('rOurCopy'), value: job.filesDeletedAt || !deleteAt ? ourCopy : t('rOurDeleteAt', { time: clock(new Date(deleteAt).toISOString()) }) },
-            { label: t('rShopCopies'), value: shopCopies },
-          ].filter((n) => n.value),
-          footer: `Counter Drop · ${job.id}`,
-        },
-        `CounterDrop-${shop.slug}-${job.token ?? job.id}.png`,
-      )
+      await downloadReceipt(receiptData(), receiptFile)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create the receipt')
     }
   }
 
   const share = async () => {
-    const lines = [
-      `Counter Drop · ${shop.name} · ${job.token ?? ''}`,
-      job.state === 'collected' ? `${t('rAmount')}: ${rupees(job.priceTotalPaise)} · ${t('rPaid')}: ${paidLabel(job, t)}` : t(job.cancelReason === 'not_collected' ? 'notCollected' : 'cancelledNote'),
-      ...job.files.map((f, i) => `${fileName(i)} · ${fileStatus(f, t)}`),
-      `${t('rOurCopy')}: ${ourCopy}`,
-      `${t('rShopCopies')}: ${shopCopies}`,
-    ]
-    const text = lines.filter(Boolean).join('\n')
+    setNotice('')
     try {
-      if (navigator.share) await navigator.share({ text })
-      else await navigator.clipboard.writeText(text)
-    } catch {
-      /* user closed the share sheet */
+      // Image + message once collected; before that there's no receipt yet, so the message alone.
+      const r = await shareReceipt(job.state === 'collected' ? receiptData() : null, shareText(), receiptFile)
+      if (r === 'copied') setNotice(t('shareCopied'))
+      if (r === 'downloaded') setNotice(t('shareSaved'))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not share the receipt')
     }
   }
 
   return (
     <Shell shop={shop} wide>
       {error && <Banner tone="danger">{error}</Banner>}
+      {notice && <Banner tone="ready">{notice}</Banner>}
       <div className="space-y-3 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6 lg:space-y-0">
         <div className="space-y-3">
           <section
